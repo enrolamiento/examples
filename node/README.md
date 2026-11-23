@@ -1,6 +1,7 @@
 # Ejemplos en Node
 
-Dos ejemplos que corren con Node 22 o más nuevo, sin instalar dependencias.
+Dos ejemplos sobre el SDK oficial, [`enrolamiento`](https://www.npmjs.com/package/enrolamiento). Corren con
+Node 22.12 o más nuevo.
 
 | Ejemplo | Archivo | Necesita |
 |---|---|---|
@@ -12,6 +13,7 @@ Dos ejemplos que corren con Node 22 o más nuevo, sin instalar dependencias.
 Todos los comandos se corren desde esta carpeta.
 
 ```bash
+npm install
 cp .env.example .env
 ```
 
@@ -95,16 +97,17 @@ Los eventos, sus campos y los reintentos están en la guía de
 
 | Paso | Por qué |
 |---|---|
-| Lee el cuerpo crudo, sin parsearlo | La firma cubre los bytes exactos: un cuerpo reescrito ya no coincide |
-| Rechaza un aviso de hace más de 5 minutos | Protege contra la repetición de un aviso capturado |
-| Compara la firma en tiempo constante | Una comparación común filtra información por el tiempo que tarda |
+| Lee el cuerpo crudo y se lo pasa a `webhooks.verificar` | La firma cubre los bytes exactos: un cuerpo reescrito ya no coincide |
+| Rechaza un aviso de hace más de 5 minutos (lo hace `verificar`) | Protege contra la repetición de un aviso capturado |
+| Compara la firma en tiempo constante (lo hace `verificar`) | Una comparación común filtra información por el tiempo que tarda |
 | Responde 204 antes de procesar | Pasados 10 segundos sin respuesta, la entrega cuenta como fallida y se reintenta |
-| Ignora una entrega ya vista (`X-Enrolamiento-Entrega`) | Un aviso puede llegar más de una vez |
+| Ignora un aviso ya visto, por su `id` | Un aviso puede llegar más de una vez, con el mismo `id` |
+| Deja una rama `default` al leer `evento` | La API puede agregar eventos que esta versión no conoce |
 
-El receptor guarda las entregas vistas en memoria. En su sistema, guárdelas en su base de datos.
+El receptor guarda los avisos vistos en memoria. En su sistema, guárdelos en su base de datos.
 
-La verificación de la firma está en [`webhook-receiver/signature.mjs`](webhook-receiver/signature.mjs)
-y tiene pruebas, que corren sin red:
+[`webhook-receiver/receiver.test.mjs`](webhook-receiver/receiver.test.mjs) arranca el receptor y le envía avisos
+bien y mal firmados. Corre en su máquina, sin salir a la red:
 
 ```bash
 npm test
@@ -114,9 +117,10 @@ npm test
 
 | Qué ve | Causa | Qué hacer |
 |---|---|---|
-| `Faltan ENROLAMIENTO_USUARIO y ENROLAMIENTO_APIKEY` | `.env` no se cargó o está incompleto | Corra el comando desde esta carpeta, con `--env-file=.env` |
+| `Cannot find package 'enrolamiento'` | Falta instalar el SDK | `npm install`, desde esta carpeta |
+| `Faltan las credenciales de la API` | `.env` no se cargó o está incompleto | Corra el comando desde esta carpeta, con `--env-file=.env` |
 | `node: .env: not found` | No existe `.env` | `cp .env.example .env` |
-| `node: bad option: --env-file=.env` | Node anterior a 20.6 | Instale Node 22 o más nuevo |
+| `node: bad option: --env-file=.env` | Node anterior a 20.6 | Instale Node 22.12 o más nuevo |
 | `401: revise ENROLAMIENTO_USUARIO…` | La API no aceptó la credencial | Escriba el usuario como lo muestra el portal (con guion, y `K` mayúscula si corresponde). Si generó una APIKey nueva, la anterior dejó de servir |
 | `No hay certificación para…` | No hay una certificación para ese RUT | Es la respuesta esperada para un RUT que todavía no certificó |
 | `409: se alcanzó el límite de llamadas` | Más de 120 llamadas por minuto | Espere al menos 60 segundos antes de reintentar |
@@ -124,12 +128,13 @@ npm test
 
 ## Llevarlo a su sistema
 
-[`common/enrolamiento.mjs`](common/enrolamiento.mjs) trae lo que toda integración necesita: la
-credencial y `leerError`, que clasifica un error de la API y extrae su código. Cópielo y adáptelo.
+Instale el SDK en su proyecto con `npm install enrolamiento`. Trae lo que toda integración necesita: la
+credencial, los errores con su código, los reintentos y la verificación de webhooks. Su
+[README](https://github.com/enrolamiento/enrolamiento-node#readme) lo explica entero.
 
 - **Decida por el código de error, no por el status.** Los rechazos de negocio llegan como HTTP 500
   ([Errores y reintentos](https://developers.enrolamiento.cl/docs/errores-y-reintentos/)).
-- **Pase `ambiente` siempre explícito** en las operaciones que lo reciben. Si se omite, o si el valor
-  no se reconoce, la operación corre en producción
+- **Fije `ambiente` al crear el cliente**: `new Enrolamiento({ ambiente: Ambiente.Homologacion })`. La API corre
+  en producción si `ambiente` falta o no se reconoce; el SDK no envía una operación que lo recibe sin él
   ([Ambientes](https://developers.enrolamiento.cl/docs/ambientes/)).
 - **No ponga la APIKey en código que corra en el navegador.**

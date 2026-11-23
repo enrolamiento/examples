@@ -3,8 +3,13 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "test": "node --test"
+  },
+  "dependencies": {
+    "enrolamiento": "^0.1.0"
   }
 }

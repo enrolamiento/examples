@@ -10,7 +10,8 @@ la certificación SII para emisores de DTE.
 
 ## Qué necesita
 
-- **Node 22 o más nuevo.** Los ejemplos no instalan dependencias.
+- **Node 22.12 o más nuevo.** Los ejemplos usan el SDK oficial,
+  [`enrolamiento`](https://www.npmjs.com/package/enrolamiento), y no tienen otra dependencia.
 - **Una cuenta de Enrolamiento**, para el ejemplo que llama a la API: su usuario y su APIKey están en
   el portal de clientes, **Mi Cuenta**, pestaña **Integración**. Si todavía no tiene cuenta, créela en
   [www.enrolamiento.cl](https://www.enrolamiento.cl).
@@ -22,6 +23,7 @@ El receptor de webhooks se puede probar sin cuenta, en su máquina.
 ```bash
 git clone https://github.com/enrolamiento/examples.git
 cd examples/node
+npm install
 cp .env.example .env    # complete su usuario y su APIKey
 node --env-file=.env quickstart/get-certification.mjs <RUT de la empresa>
 ```
@@ -38,11 +40,13 @@ configuración de cada ejemplo y qué hacer si algo falla están en [`node/READM
 | [Errores y reintentos](https://developers.enrolamiento.cl/docs/errores-y-reintentos/) | Cómo leer un error y cuándo es seguro reintentar |
 | [Webhooks](https://developers.enrolamiento.cl/docs/webhooks/) | Los eventos, la firma y los reintentos |
 | [Changelog](https://developers.enrolamiento.cl/docs/changelog/) | Qué cambió en cada versión de la API |
+| [SDK de Node](https://github.com/enrolamiento/enrolamiento-node#readme) | El paquete que usan estos ejemplos: errores, reintentos, `ambiente` y webhooks |
 
 ## Compatibilidad
 
-Los ejemplos usan la versión 1 de la API (`/v1/…`). Un cambio incompatible de la API sube su versión
-mayor y se anuncia en el [changelog](https://developers.enrolamiento.cl/docs/changelog/).
+Los ejemplos usan la versión 0.1 del SDK, que habla con la versión 1 de la API (`/v1/…`). Un cambio
+incompatible de la API sube su versión mayor y se anuncia en el
+[changelog](https://developers.enrolamiento.cl/docs/changelog/).
 
 ## Soporte
 

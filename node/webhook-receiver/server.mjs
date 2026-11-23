@@ -6,7 +6,7 @@
 // publique este servidor detrás de su proxy o de un túnel https para recibir avisos reales.
 
 import { createServer } from 'node:http';
-import { esValido } from './signature.mjs';
+import { ErrorDeFirma, webhooks } from 'enrolamiento';
 
 const SECRETO = process.env.ENROLAMIENTO_WEBHOOK_SECRETO;
 const PUERTO = Number(process.env.PUERTO ?? 3000);
@@ -19,7 +19,7 @@ if (!SECRETO) {
 
 // Un aviso puede llegar más de una vez. En producción, guarde los identificadores
 // en su base de datos: este Set se pierde al reiniciar el proceso.
-const entregasVistas = new Set();
+const avisosVistos = new Set();
 
 function leerCuerpoCrudo(pedido) {
   return new Promise((listo, fallo) => {
@@ -39,16 +39,21 @@ function leerCuerpoCrudo(pedido) {
   });
 }
 
-function procesar(aviso) {
-  if (aviso.evento === 'certificacion.finalizada') {
-    console.log(`Certificación finalizada: ${aviso.rut}`, aviso.resolucion, aviso.respaldo?.estado ?? 'sin respaldo');
-  } else if (aviso.evento === 'respaldo.finalizado') {
-    // Con "listo", respaldo.url se descarga con su usuario y su APIKey.
-    console.log(`Respaldo ${aviso.respaldo.estado}: ${aviso.rut}`, aviso.respaldo.codigo ?? '');
-  } else if (aviso.evento === 'prueba') {
-    console.log('Llegó el aviso de «Enviar prueba».');
-  } else {
-    console.log(`Evento que este receptor no conoce: ${aviso.evento}`);
+function procesar(evento) {
+  switch (evento.evento) {
+    case 'certificacion.finalizada':
+      console.log(`Certificación finalizada: ${evento.rut}`, evento.resolucion, evento.respaldo?.estado ?? 'sin respaldo');
+      break;
+    case 'respaldo.finalizado':
+      // Con "listo", respaldo.url se descarga con su usuario y su APIKey.
+      console.log(`Respaldo ${evento.respaldo.estado}: ${evento.rut}`, evento.respaldo.codigo ?? '');
+      break;
+    case 'prueba':
+      console.log('Llegó el aviso de «Enviar prueba».');
+      break;
+    default:
+      // La API puede agregar eventos: uno que este receptor no conoce se ignora, sin fallar.
+      console.log(`Evento que este receptor no conoce: ${evento.evento}`);
   }
 }
 
@@ -66,9 +71,14 @@ const servidor = createServer(async (pedido, respuesta) => {
     return;
   }
 
-  // Verifique siempre antes de procesar, sobre el cuerpo crudo.
-  if (!esValido(SECRETO, cuerpo, pedido.headers)) {
-    respuesta.writeHead(401).end();
+  // Verifique siempre antes de procesar, y sobre el cuerpo crudo: la firma cubre los bytes exactos.
+  // verificar también rechaza un aviso con más de 5 minutos de diferencia con su reloj.
+  let evento;
+  try {
+    evento = webhooks.verificar(cuerpo, pedido.headers, { secreto: SECRETO });
+  } catch (error) {
+    if (!(error instanceof ErrorDeFirma)) console.error(error.message);
+    respuesta.writeHead(error instanceof ErrorDeFirma ? 401 : 500).end();
     return;
   }
 
@@ -76,14 +86,14 @@ const servidor = createServer(async (pedido, respuesta) => {
   // pasados 10 segundos sin respuesta, la entrega cuenta como fallida y se reintenta.
   respuesta.writeHead(204).end();
 
-  const entrega = pedido.headers['x-enrolamiento-entrega'];
-  if (entregasVistas.has(entrega)) return;
-  entregasVistas.add(entrega);
+  // El id del aviso es el mismo en cada reintento.
+  if (avisosVistos.has(evento.id)) return;
+  avisosVistos.add(evento.id);
 
   try {
-    procesar(JSON.parse(cuerpo.toString('utf8')));
+    procesar(evento);
   } catch (error) {
-    console.error(`No se pudo procesar la entrega ${entrega}:`, error.message);
+    console.error(`No se pudo procesar el aviso ${evento.id}:`, error.message);
   }
 });
 

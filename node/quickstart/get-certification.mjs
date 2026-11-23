@@ -3,9 +3,13 @@
 //
 //   node --env-file=.env quickstart/get-certification.mjs 11111111-1
 
-import { consultar, leerError } from '../common/enrolamiento.mjs';
-
-const ESTADOS = ['creada', 'en progreso', 'finalizada', 'con error'];
+import Enrolamiento, {
+  ErrorDeApi,
+  ErrorDeAutenticacion,
+  ErrorDeConfiguracion,
+  ErrorDeLimite,
+  EstadoCertificacion,
+} from 'enrolamiento';
 
 // El RUT de la empresa cliente que usted certifica, no el suyo como proveedor.
 const rut = process.argv[2];
@@ -14,37 +18,38 @@ if (!rut) {
   process.exit(2);
 }
 
-let respuesta;
-try {
-  respuesta = await consultar(`/v1/certificaciones/${encodeURIComponent(rut)}/consultar`);
-} catch (error) {
-  // Falta la credencial o no hubo red: no hay respuesta de la API que leer.
-  console.error(error.message);
-  process.exit(2);
-}
+// Los estados llegan como números; el SDK trae sus nombres.
+const nombreDelEstado = (valor) =>
+  Object.keys(EstadoCertificacion).find((nombre) => EstadoCertificacion[nombre] === valor) ?? 'desconocido';
 
-if (respuesta.ok) {
-  const certificacion = await respuesta.json();
-  // Los estados, etapas y pasos llegan como números, no como texto.
+// Lee ENROLAMIENTO_USUARIO y ENROLAMIENTO_APIKEY del entorno.
+const enrolamiento = new Enrolamiento();
+
+try {
+  const certificacion = await enrolamiento.certificaciones.v1.consultar({ rut });
   console.log(`RUT:        ${certificacion.RUT}`);
-  console.log(`Estado:     ${certificacion.Estado} (${ESTADOS[certificacion.Estado] ?? 'desconocido'})`);
+  console.log(`Estado:     ${certificacion.Estado} (${nombreDelEstado(certificacion.Estado)})`);
   console.log(`Etapa:      ${certificacion.Etapa}`);
   console.log(`Comentario: ${certificacion.Comentario ?? ''}`);
-  process.exit(0);
+} catch (error) {
+  if (error instanceof ErrorDeConfiguracion) {
+    // Faltan las credenciales, o un parámetro tiene otra forma: no se envió nada.
+    console.error(error.message);
+    process.exit(2);
+  }
+  if (error instanceof ErrorDeAutenticacion) {
+    console.error('401: revise ENROLAMIENTO_USUARIO y ENROLAMIENTO_APIKEY.');
+  } else if (error instanceof ErrorDeLimite) {
+    console.error('409: se alcanzó el límite de llamadas. Espere al menos 60 segundos.');
+  } else if (error instanceof ErrorDeApi && error.status === 404) {
+    // La URL es correcta y no hay certificación para ese RUT. No es una falla de su integración.
+    console.error(`No hay certificación para ${rut}: ${error.mensaje}`);
+  } else if (error instanceof ErrorDeApi) {
+    // Decida por el código, nunca por el status: los rechazos de negocio llegan como HTTP 500.
+    console.error(`HTTP ${error.status}, código ${error.codigo}, reintentable ${error.reintentable}: ${error.mensaje}`);
+  } else {
+    // Sin respuesta de la API: falla de red o tiempo agotado.
+    console.error(`${error.name}: ${error.message}`);
+  }
+  process.exit(1);
 }
-
-const error = await leerError(respuesta);
-
-if (respuesta.status === 404 && error.familia === 'negocio') {
-  // Texto plano que empieza con «No existe una certificación…»: la URL es correcta
-  // y no hay certificación para ese RUT. Cualquier otro 404 es una URL mal escrita.
-  console.error(`No hay certificación para ${rut}: ${error.mensaje}`);
-} else if (error.familia === 'autenticacion') {
-  // Con cuerpo, el header no llegó; sin cuerpo, la credencial no se aceptó. No se reintenta.
-  console.error('401: revise ENROLAMIENTO_USUARIO y ENROLAMIENTO_APIKEY.');
-} else if (error.familia === 'rate-limit') {
-  console.error('409: se alcanzó el límite de llamadas. Espere al menos 60 segundos.');
-} else {
-  console.error(`HTTP ${respuesta.status}`, error);
-}
-process.exit(1);

@@ -3,7 +3,8 @@
 //
 //   node --env-file=.env webhook-receiver/send-test-event.mjs
 
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { webhooks } from 'enrolamiento';
 
 const SECRETO = process.env.ENROLAMIENTO_WEBHOOK_SECRETO;
 const DESTINO = process.env.DESTINO ?? `http://127.0.0.1:${process.env.PUERTO ?? 3000}`;
@@ -14,11 +15,10 @@ if (!SECRETO) {
 }
 
 const id = randomUUID();
-const fecha = new Date().toISOString();
-const cuerpo = JSON.stringify({ evento: 'prueba', id, fecha });
+const cuerpo = JSON.stringify({ evento: 'prueba', id, fecha: new Date().toISOString() });
 
-// La firma cubre la fecha de la cabecera, un punto y el cuerpo exacto que se envía.
-const firma = 'sha256=' + createHmac('sha256', SECRETO).update(`${fecha}.`).update(cuerpo).digest('hex');
+// firmar devuelve las dos cabeceras de la firma: X-Enrolamiento-Fecha y X-Enrolamiento-Firma.
+const firma = webhooks.firmar(cuerpo, SECRETO);
 
 let respuesta;
 try {
@@ -28,8 +28,7 @@ try {
       'Content-Type': 'application/json; charset=utf-8',
       'X-Enrolamiento-Evento': 'prueba',
       'X-Enrolamiento-Entrega': id,
-      'X-Enrolamiento-Fecha': fecha,
-      'X-Enrolamiento-Firma': firma,
+      ...firma,
     },
     body: cuerpo,
   });
