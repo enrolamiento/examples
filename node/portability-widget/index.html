@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Portabilidad, en mi sistema</title>
+  </head>
+  <body>
+    <h1>Mi sistema</h1>
+    <p>
+      <label for="escenario">Escenario de prueba</label>
+      <select id="escenario">
+        <option value="camino_feliz">camino_feliz</option>
+        <option value="certificado_no_administrador">certificado_no_administrador</option>
+        <option value="conflicto">conflicto</option>
+        <option value="respaldo_en_curso">respaldo_en_curso</option>
+        <option value="resolucion_emitida">resolucion_emitida</option>
+      </select>
+      <button id="reiniciar" type="button">Reiniciar</button>
+    </p>
+
+    <!-- Paso 2 de la guía: el contenedor y el script, cargado desde el origen del widget. -->
+    <div id="portabilidad"></div>
+    <script src="{{WIDGET}}/v1/enrolamiento.js"></script>
+
+    <h2>Eventos que recibe esta página</h2>
+    <ol id="eventos"></ol>
+
+    <script src="/page.js"></script>
+  </body>
+</html>

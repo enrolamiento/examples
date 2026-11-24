@@ -7,6 +7,7 @@ la certificación SII para emisores de DTE.
 |---|---|---|
 | Consultar una certificación | La primera llamada: autenticarse, leer la respuesta y leer un error | [`node/quickstart`](node/quickstart/get-certification.mjs) |
 | Recibir webhooks | Verificar la firma, deduplicar y responder a tiempo | [`node/webhook-receiver`](node/webhook-receiver/server.mjs) |
+| Widget de Portabilidad | Crear la sesión en el servidor y montar el widget en una página propia | [`node/portability-widget`](node/portability-widget/server.mjs) |
 
 ## Qué necesita
 
@@ -39,6 +40,7 @@ configuración de cada ejemplo y qué hacer si algo falla están en [`node/READM
 | [Referencia](https://developers.enrolamiento.cl/docs/referencia/) | Cada operación, con sus parámetros, respuestas y errores |
 | [Errores y reintentos](https://developers.enrolamiento.cl/docs/errores-y-reintentos/) | Cómo leer un error y cuándo es seguro reintentar |
 | [Webhooks](https://developers.enrolamiento.cl/docs/webhooks/) | Los eventos, la firma y los reintentos |
+| [Widget de Portabilidad](https://developers.enrolamiento.cl/docs/portabilidad/) | De la sesión al widget andando, y qué pasa cuando la empresa vuelve otro día |
 | [Changelog](https://developers.enrolamiento.cl/docs/changelog/) | Qué cambió en cada versión de la API |
 | [SDK de Node](https://github.com/enrolamiento/enrolamiento-node#readme) | El paquete que usan estos ejemplos: errores, reintentos, `ambiente` y webhooks |
 

@@ -1,12 +1,13 @@
 # Ejemplos en Node
 
-Dos ejemplos sobre el SDK oficial, [`enrolamiento`](https://www.npmjs.com/package/enrolamiento). Corren con
+Tres ejemplos sobre el SDK oficial, [`enrolamiento`](https://www.npmjs.com/package/enrolamiento). Corren con
 Node 22.12 o más nuevo.
 
 | Ejemplo | Archivo | Necesita |
 |---|---|---|
 | Consultar una certificación | [`quickstart/get-certification.mjs`](quickstart/get-certification.mjs) | Su usuario y su APIKey |
 | Recibir webhooks | [`webhook-receiver/server.mjs`](webhook-receiver/server.mjs) | Un secreto de firma |
+| Widget de Portabilidad | [`portability-widget/server.mjs`](portability-widget/server.mjs) | Su usuario y su APIKey |
 
 ## Configuración
 
@@ -143,3 +144,49 @@ credencial, los errores con su código, los reintentos y la verificación de web
   en producción si `ambiente` falta o no se reconoce; el SDK no envía una operación que lo recibe sin él
   ([Ambientes](https://developers.enrolamiento.cl/docs/ambientes/)).
 - **No ponga la APIKey en código que corra en el navegador.**
+
+## Widget de Portabilidad
+
+El recorrido con el que una empresa deja el facturador gratuito del SII y pasa a su sistema, dentro
+de una página suya. El ejemplo hace las dos mitades de la integración:
+
+| Archivo | Dónde corre | Qué hace |
+|---|---|---|
+| [`server.mjs`](portability-widget/server.mjs) | Su servidor | Crea la sesión con su APIKey y entrega solo el `client_secret` |
+| [`index.html`](portability-widget/index.html) | El navegador | El contenedor y el script del widget |
+| [`page.js`](portability-widget/page.js) | El navegador | Monta el widget y anota los eventos que recibe |
+
+```bash
+node --env-file=.env portability-widget/server.mjs
+```
+
+Abra `http://localhost:3000`. Aparece el widget pidiendo el certificado digital: suba cualquier
+archivo, porque en una sesión de prueba no se valida ni se guarda. En cerca de un minuto el recorrido
+llega a la pantalla de cierre, y debajo quedan los eventos: `ready`, varios `step_change` y
+`completed`.
+
+- **Es una sesión de prueba.** No consulta al SII, no crea una certificación y no descuenta cupos.
+  No hace falta contratar nada: alcanza con una cuenta.
+- **El selector cambia el escenario** y «Reiniciar» empieza el guion de cero. Los cinco están en la
+  [guía](https://developers.enrolamiento.cl/docs/portabilidad/#probar).
+- **Desde `localhost` no hay que registrar el origen.** En cualquier otro dominio, regístrelo antes
+  en el portal de clientes, **Portabilidad › Instalación**.
+- **Una sesión de prueba no envía webhooks.** Para probar su receptor, use `npm run webhooks:probar`.
+
+Si la página dice que no pudo crear la sesión, la consola del servidor trae el motivo:
+
+| Motivo | Qué significa |
+|---|---|
+| `WIDGET_NO_HABILITADO` | El widget todavía no está habilitado para su cuenta. No lo reintente |
+| `FUNCION_NO_CONTRATADA` | Se pidió una sesión real sin el respaldo activo. Este ejemplo pide siempre una de prueba |
+| `DATOS_INVALIDOS` | Un campo del pedido no es válido; el mensaje dice cuál |
+
+Lo que este ejemplo simplifica, y que su sistema tiene que hacer:
+
+- La ruta `/sesion` no pide que el usuario haya iniciado sesión. La suya, sí.
+- El RUT es fijo. El suyo sale de lo que su sistema ya sabe del usuario, nunca del navegador.
+- Nada se activa al recibir `completed`: la confirmación es el webhook `certificacion.finalizada`.
+
+La explicación de cada paso está en
+[Widget de Portabilidad](https://developers.enrolamiento.cl/docs/portabilidad/), y cada método,
+evento y opción, en la [referencia del widget](https://developers.enrolamiento.cl/docs/widget/).
