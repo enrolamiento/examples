@@ -7,9 +7,10 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "webhooks:probar": "node --env-file=.env node_modules/enrolamiento/dist/cli.js webhooks probar"
   },
   "dependencies": {
-    "enrolamiento": "^0.1.0"
+    "enrolamiento": "^0.2.0"
   }
 }

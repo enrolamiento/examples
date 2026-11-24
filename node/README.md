@@ -70,14 +70,19 @@ En una terminal, arranque el receptor:
 node --env-file=.env webhook-receiver/server.mjs
 ```
 
-En otra, envíele un aviso firmado con ese mismo secreto:
+En otra, pruébelo con la línea de comandos del SDK, que lee ese mismo secreto de `.env`:
 
 ```bash
-node --env-file=.env webhook-receiver/send-test-event.mjs
+npm run webhooks:probar
 ```
 
-El envío imprime `http://127.0.0.1:3000 respondió 204`, y el receptor, `Llegó el aviso de «Enviar
-prueba».`.
+Le envía 15 avisos firmados como los firma Enrolamiento: los que el receptor debe aceptar, uno por
+evento y por estado del respaldo, y cuatro que debe rechazar (firmado con otro secreto, con el cuerpo
+alterado, con una fecha vencida y sin firma). Termina con `15 de 15 casos respondieron como se
+esperaba.`, y el receptor imprime una línea por cada aviso válido.
+
+El mismo comando prueba un receptor escrito en cualquier lenguaje: `npx enrolamiento webhooks probar
+--url http://localhost:8080/su-ruta`, con `ENROLAMIENTO_WEBHOOK_SECRETO` en el entorno.
 
 ### Recibir avisos reales
 
