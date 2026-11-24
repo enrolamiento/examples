@@ -19,16 +19,21 @@ async function pedirSesion(conEscenario) {
 }
 
 let portabilidad;
+let turno = 0;
 
 async function empezar() {
+  // Si llega otro «Reiniciar» mientras se espera la sesión, este pedido queda viejo y no monta nada:
+  // sin esto, la sesión que responde última gana, aunque sea la del escenario anterior.
+  const miTurno = ++turno;
   eventos.replaceChildren();
   let clientSecret;
   try {
     clientSecret = await pedirSesion(escenario.value);
   } catch (error) {
-    anotar(`No se pudo crear la sesión: ${error.message}. Mire la consola del servidor.`);
+    if (miTurno === turno) anotar(`No se pudo crear la sesión: ${error.message}. Mire la consola del servidor.`);
     return;
   }
+  if (miTurno !== turno) return;
 
   portabilidad?.unmount();
   portabilidad = Enrolamiento().portabilidad({ clientSecret, locale: 'es-CL' });

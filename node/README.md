@@ -162,9 +162,10 @@ node --env-file=.env portability-widget/server.mjs
 
 Abra `http://localhost:3000`. Aparece el widget pidiendo el certificado digital: suba cualquier
 archivo `.pfx` o `.p12` de hasta 75 KB, escriba cualquier contraseña y acepte el uso del certificado.
-En una sesión de prueba el contenido no se valida ni se guarda. Confirme los datos de ejemplo, con un
-producto y un servicio. Desde ahí, en cerca de un minuto el recorrido llega a la pantalla de cierre,
-y debajo quedan los eventos: `ready`, varios `step_change` y `completed`.
+En una sesión de prueba el contenido no se valida ni se guarda. Confirme los datos de ejemplo y
+agregue un producto y un servicio, cada uno con su nombre y su precio en números. Desde ahí, en cerca
+de un minuto el recorrido llega a la pantalla de cierre, y debajo quedan los eventos: `ready`, varios
+`step_change` y `completed`.
 
 - **Es una sesión de prueba.** No consulta al SII, no crea una certificación y no descuenta cupos.
   No hace falta contratar nada: alcanza con una cuenta.

@@ -120,4 +120,7 @@ test('la página registra los oyentes antes de montar y no guarda el secreto', a
     assert.ok(js.includes(`portabilidad.on('${evento}'`), evento);
   }
   assert.doesNotMatch(js, /localStorage|sessionStorage|document\.cookie|console\.log\(.*[sS]ecret/);
+  // Dos «Reiniciar» seguidos: el pedido viejo no monta su sesión encima de la nueva.
+  assert.match(js, /const miTurno = \+\+turno;/);
+  assert.match(js, /if \(miTurno !== turno\) return;\n\n  portabilidad\?\.unmount\(\);/);
 });
