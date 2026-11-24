@@ -161,9 +161,10 @@ node --env-file=.env portability-widget/server.mjs
 ```
 
 Abra `http://localhost:3000`. Aparece el widget pidiendo el certificado digital: suba cualquier
-archivo, porque en una sesión de prueba no se valida ni se guarda. En cerca de un minuto el recorrido
-llega a la pantalla de cierre, y debajo quedan los eventos: `ready`, varios `step_change` y
-`completed`.
+archivo `.pfx` o `.p12` de hasta 75 KB, escriba cualquier contraseña y acepte el uso del certificado.
+En una sesión de prueba el contenido no se valida ni se guarda. Confirme los datos de ejemplo, con un
+producto y un servicio. Desde ahí, en cerca de un minuto el recorrido llega a la pantalla de cierre,
+y debajo quedan los eventos: `ready`, varios `step_change` y `completed`.
 
 - **Es una sesión de prueba.** No consulta al SII, no crea una certificación y no descuenta cupos.
   No hace falta contratar nada: alcanza con una cuenta.
@@ -185,7 +186,10 @@ Lo que este ejemplo simplifica, y que su sistema tiene que hacer:
 
 - La ruta `/sesion` no pide que el usuario haya iniciado sesión. La suya, sí.
 - El RUT es fijo. El suyo sale de lo que su sistema ya sabe del usuario, nunca del navegador.
-- Nada se activa al recibir `completed`: la confirmación es el webhook `certificacion.finalizada`.
+- Nada se activa al recibir `completed`: la confirmación es el webhook `certificacion.finalizada`,
+  que llega una vez por cada certificación de la empresa.
+- Un `error` no es el fin del recorrido: también llega por un rechazo que la empresa corrige en el
+  mismo widget, como en el escenario `certificado_no_administrador`.
 
 La explicación de cada paso está en
 [Widget de Portabilidad](https://developers.enrolamiento.cl/docs/portabilidad/), y cada método,
