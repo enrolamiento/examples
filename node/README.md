@@ -1,6 +1,6 @@
 # Ejemplos en Node
 
-Tres ejemplos sobre el SDK oficial, [`enrolamiento`](https://www.npmjs.com/package/enrolamiento). Corren con
+Cuatro ejemplos sobre el SDK oficial, [`enrolamiento`](https://www.npmjs.com/package/enrolamiento). Corren con
 Node 22.12 o más nuevo.
 
 | Ejemplo | Archivo | Necesita |
@@ -8,6 +8,7 @@ Node 22.12 o más nuevo.
 | Consultar una certificación | [`quickstart/get-certification.mjs`](quickstart/get-certification.mjs) | Su usuario y su APIKey |
 | Recibir webhooks | [`webhook-receiver/server.mjs`](webhook-receiver/server.mjs) | Un secreto de firma |
 | Widget de Portabilidad | [`portability-widget/server.mjs`](portability-widget/server.mjs) | Su usuario y su APIKey |
+| Mini ERP: la empresa entra por el widget y termina con sus datos | [`mini-erp/`](mini-erp/README.md) | Su usuario, su APIKey y un secreto de prueba |
 
 ## Configuración
 
@@ -173,7 +174,8 @@ de un minuto el recorrido llega a la pantalla de cierre, y debajo quedan los eve
   [guía](https://developers.enrolamiento.cl/docs/portabilidad/#probar).
 - **Desde `localhost` no hay que registrar el origen.** En cualquier otro dominio, regístrelo antes
   en el portal de clientes, **Portabilidad › Instalación**.
-- **Una sesión de prueba no envía webhooks.** Para probar su receptor, use `npm run webhooks:probar`.
+- **Una sesión de prueba no envía webhooks.** Para probar su receptor, use `npm run webhooks:probar`. Para ver
+  el camino completo, con el aviso, la descarga del respaldo y la importación, pruebe el [Mini ERP](#mini-erp).
 
 Si la página dice que no pudo crear la sesión, la consola del servidor trae el motivo:
 
@@ -195,3 +197,20 @@ Lo que este ejemplo simplifica, y que su sistema tiene que hacer:
 La explicación de cada paso está en
 [Widget de Portabilidad](https://developers.enrolamiento.cl/docs/portabilidad/), y cada método,
 evento y opción, en la [referencia del widget](https://developers.enrolamiento.cl/docs/widget/).
+
+## Mini ERP
+
+Un software ficticio, «Andes ERP», con la integración completa de Portabilidad: la empresa entra por el
+widget con la marca del software y termina dentro del ERP con sus productos, clientes, proveedores, ventas y
+compras, cada documento con su XML y su PDF.
+
+```bash
+npm run mini-erp
+```
+
+Abra `http://localhost:3000`, pulse **Traer mi empresa** y recorra el widget. Al terminar, **Simular el aviso**
+corre `webhooks enviar` del SDK: un aviso firmado con el respaldo de ejemplo listo para descargar. El ERP lo
+verifica, descarga el respaldo y lo importa, como lo haría con uno real.
+
+Cómo cambiar la marca, qué archivos copiar a su sistema y qué exige el modo real están en
+[`mini-erp/README.md`](mini-erp/README.md).
