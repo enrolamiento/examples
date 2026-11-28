@@ -19,6 +19,9 @@ import { FORMA_DEL_ID, SENTIDOS } from './store.mjs';
 export const TOPE_DE_BYTES = 50 * 1024 * 1024;
 // Lo descomprimido, por si el .zip es una bomba: los PDF casi no se comprimen, los JSON sí.
 const TOPE_DESCOMPRIMIDO = 4 * TOPE_DE_BYTES;
+// Entradas del .zip. Un respaldo de 50 MB, con cada documento en un XML y un PDF de al menos un par
+// de KB, no llega a 40.000.
+export const TOPE_DE_ENTRADAS = 50_000;
 
 const OBLIGATORIOS = ['ventas', 'compras', 'clientes', 'proveedores', 'productos'];
 const OPCIONALES = ['faltantes'];
@@ -53,8 +56,7 @@ export async function importarRespaldo(bytes, { rut, bytesEsperados, almacen }) 
 
   const zip = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.length);
   const raiz = `mipyme-backup-${rut}`;
-  const indice = leerIndice(zip);
-  revisarNombres(indice, raiz, rut);
+  const indice = leerIndice(zip, raiz, rut);
   const contenido = descomprimir(zip, indice);
 
   const json = {};
@@ -85,26 +87,17 @@ export async function importarRespaldo(bytes, { rut, bytesEsperados, almacen }) 
   return almacen.resumen();
 }
 
-// Los nombres y tamaños declarados de cada entrada, sin descomprimir nada.
-function leerIndice(zip) {
+// Los nombres y tamaños declarados de cada entrada, sin descomprimir nada. Cada entrada se revisa al
+// leerla, no al final: el índice de un .zip dice cuántas entradas trae (hasta 2^32 - 1 con ZIP64) y
+// fflate no comprueba la firma de cada cabecera, así que unos pocos bytes pueden fabricar entradas
+// vacías sin fin. La primera que no es de un respaldo corta la lectura, y el tope de entradas la
+// acota de todos modos.
+function leerIndice(zip, raiz, rut) {
   const entradas = [];
-  try {
-    unzipSync(zip, {
-      filter: (entrada) => {
-        entradas.push(entrada);
-        return false;
-      },
-    });
-  } catch {
-    rechazar('El archivo no es un .zip legible.');
-  }
-  return entradas;
-}
-
-function revisarNombres(entradas, raiz, rut) {
   const vistos = new Set();
   let descomprimido = 0;
-  for (const { name: nombre, originalSize, compression } of entradas) {
+  const revisar = ({ name: nombre, originalSize, compression }) => {
+    if (entradas.length >= TOPE_DE_ENTRADAS) rechazar(`El .zip trae más de ${TOPE_DE_ENTRADAS} entradas.`);
     if (vistos.has(nombre)) rechazar(`El .zip trae dos veces ${citar(nombre)}.`);
     vistos.add(nombre);
     // Lo que en algún sistema escapa de la carpeta donde se descomprime: rutas absolutas, unidades de
@@ -118,10 +111,24 @@ function revisarNombres(entradas, raiz, rut) {
     if (!COMPRESIONES.includes(compression)) rechazar(`El .zip usa una compresión que no es de un respaldo en ${citar(nombre)}.`);
     descomprimido += originalSize;
     if (descomprimido > TOPE_DESCOMPRIMIDO) rechazar(`El .zip descomprimido pasa de ${TOPE_DESCOMPRIMIDO} bytes.`);
+    entradas.push({ nombre, originalSize });
+  };
+  try {
+    unzipSync(zip, {
+      filter: (entrada) => {
+        revisar(entrada);
+        return false;
+      },
+    });
+  } catch (error) {
+    // El rechazo de una entrada sale tal cual; lo demás es fflate que no pudo leer el índice.
+    if (error instanceof ErrorDeImportacion) throw error;
+    rechazar('El archivo no es un .zip legible.');
   }
   for (const nombre of OBLIGATORIOS) {
     if (!vistos.has(`${raiz}/${nombre}.json`)) rechazar(`Al respaldo le falta ${nombre}.json.`);
   }
+  return entradas;
 }
 
 // Lo que va dentro de la raíz: los JSON, las carpetas emitidos/ y recibidos/, y en ellas solo
@@ -144,7 +151,7 @@ function descomprimir(zip, indice) {
   } catch {
     rechazar('El .zip está dañado: no se pudo descomprimir.');
   }
-  for (const { name: nombre, originalSize } of indice) {
+  for (const { nombre, originalSize } of indice) {
     if (contenido[nombre]?.length !== originalSize) rechazar(`El .zip está dañado en ${citar(nombre)}.`);
   }
   return contenido;

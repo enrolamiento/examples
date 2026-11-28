@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { abrirAlmacen } from './store.mjs';
-import { ErrorDeImportacion, importarRespaldo, TOPE_DE_BYTES } from './import.mjs';
+import { ErrorDeImportacion, importarRespaldo, TOPE_DE_BYTES, TOPE_DE_ENTRADAS } from './import.mjs';
 
 const RUT = '11111111-1';
 const RAIZ = `mipyme-backup-${RUT}`;
@@ -158,6 +158,53 @@ for (const [caso, armarIntento] of RECHAZOS) {
     assert.deepEqual((await readdir(carpeta)).filter((nombre) => nombre !== 'estado.json'), ['actual']);
   });
 }
+
+// Unos 100 bytes que dicen traer 2^32 - 1 entradas: un registro ZIP64 de fin de directorio, su
+// localizador y el fin de directorio clásico, con el directorio central apuntando al final del
+// archivo. fflate no revisa la firma de cada cabecera: más allá de los datos lee ceros y entrega
+// entradas de nombre vacío una tras otra. Guardarlas todas antes de revisarlas agota la memoria.
+function zip64ConMillonesDeEntradas() {
+  const bytes = Buffer.alloc(56 + 20 + 22);
+  // Registro ZIP64 de fin de directorio, en el byte 0.
+  bytes.writeUInt32LE(0x06064b50, 0);
+  bytes.writeBigUInt64LE(44n, 4);
+  bytes.writeBigUInt64LE(0xffffffffn, 24);
+  bytes.writeBigUInt64LE(0xffffffffn, 32);
+  bytes.writeBigUInt64LE(BigInt(bytes.length), 48);
+  // Localizador ZIP64: dónde está el registro.
+  bytes.writeUInt32LE(0x07064b50, 56);
+  bytes.writeBigUInt64LE(0n, 64);
+  bytes.writeUInt32LE(1, 72);
+  // Fin de directorio clásico, con los campos en 0xFFFF… para remitir al ZIP64.
+  bytes.writeUInt32LE(0x06054b50, 76);
+  bytes.writeUInt16LE(0xffff, 84);
+  bytes.writeUInt16LE(0xffff, 86);
+  bytes.writeUInt32LE(0xffffffff, 88);
+  bytes.writeUInt32LE(0xffffffff, 92);
+  return bytes;
+}
+
+test('un ZIP64 que declara 2^32 - 1 entradas se rechaza en la primera, sin agotar la memoria', async (t) => {
+  const { almacen } = await almacenDePrueba(t);
+  await importar(EJEMPLO, almacen);
+  const inicio = Date.now();
+  await assert.rejects(importar(zip64ConMillonesDeEntradas(), almacen), ErrorDeImportacion);
+  assert.ok(Date.now() - inicio < 2000, 'el rechazo debe ser inmediato');
+  assert.deepEqual(almacen.resumen(), RESUMEN_DEL_EJEMPLO);
+});
+
+test('un .zip con más de TOPE_DE_ENTRADAS entradas se rechaza', async (t) => {
+  const { almacen } = await almacenDePrueba(t);
+  // Entradas vacías con nombres válidos y distintos: solo el tope las detiene. Menos de 65.536 en
+  // total, porque fflate escribe el .zip sin ZIP64 y el conteo de 16 bits daría la vuelta.
+  const entradas = entradasDelEjemplo();
+  const vacio = new Uint8Array(0);
+  for (let folio = 1; folio <= TOPE_DE_ENTRADAS; folio++) entradas[`${RAIZ}/recibidos/99999999-9_33_${folio}.pdf`] = vacio;
+  assert.ok(Object.keys(entradas).length < 65536);
+  const bytes = Buffer.from(zipSync(entradas, { level: 0 }));
+  await assert.rejects(importar(bytes, almacen), (error) => error instanceof ErrorDeImportacion && /entradas/.test(error.message));
+  assert.equal(almacen.resumen().empresa, null);
+});
 
 test('un rechazo con el almacén vacío lo deja vacío', async (t) => {
   const { carpeta, almacen } = await almacenDePrueba(t);
