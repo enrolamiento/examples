@@ -9,6 +9,7 @@ const cargando = document.querySelector('#cargando');
 const esperando = document.querySelector('#esperando');
 const cajaDeError = document.querySelector('#recorrido-error');
 const textoDeError = document.querySelector('#recorrido-error-texto');
+const acciones = document.querySelector('#esperando-acciones');
 
 function mostrarError(texto) {
   textoDeError.textContent = texto;
@@ -33,6 +34,14 @@ async function empezar() {
   esperando.hidden = true;
   seccionWidget.hidden = false;
   cargando.hidden = false;
+  // Sin el script del widget no hay recorrido: se dice en vez de quedar en «Preparando la sesión…».
+  if (typeof Enrolamiento !== 'function') {
+    cargando.hidden = true;
+    mostrarError(
+      'No cargó el script del widget (enrolamiento.js). Revise su conexión, un bloqueador de contenido o ENROLAMIENTO_WIDGET en el .env, y recargue la página.',
+    );
+    return;
+  }
   let clientSecret;
   try {
     clientSecret = await pedirSesion('/sesion');
@@ -66,6 +75,7 @@ async function empezar() {
   portabilidad.on('completed', () => {
     seccionWidget.hidden = true;
     esperando.hidden = false;
+    esperarAviso();
   });
   // La sesión vence a los 60 minutos: se pide otra para la misma empresa, sin reiniciar el guion, y el
   // widget sigue sin recargarse.
@@ -78,6 +88,134 @@ async function empezar() {
   });
 
   portabilidad.mount('#portabilidad');
+}
+
+// --- Esperando el aviso ------------------------------------------------------------------------
+// La página consulta GET /estado cada 2 segundos: cuando el receptor importó el respaldo, va al inicio.
+// En modo prueba, el estado trae también la salida de «Simular el aviso», que el servidor corre como
+// proceso hijo con argumentos fijos. Lo que escribe el CLI se pinta como texto, nunca como HTML.
+
+const PUERTO = location.port || '80';
+// El comando que corre el servidor, tal cual. El script mini-erp:aviso es el mismo, en el puerto 3000.
+const COMANDO = `enrolamiento webhooks enviar certificacion.finalizada --url http://localhost:${PUERTO}/webhooks/certificacion`;
+const A_MANO =
+  PUERTO === '3000'
+    ? 'npm run mini-erp:aviso'
+    : `node --env-file=.env node_modules/enrolamiento/dist/cli.js webhooks enviar certificacion.finalizada --url http://localhost:${PUERTO}/webhooks/certificacion`;
+
+let consulta = null;
+let panel = null;
+// Una consulta que llega después de otra más nueva no pinta nada: mostraría un estado viejo.
+let ultimaConsulta = 0;
+
+// Un elemento con su clase y su texto. textContent: lo que trae el servidor nunca se lee como HTML.
+function crear(etiqueta, clase, texto) {
+  const elemento = document.createElement(etiqueta);
+  if (clase) elemento.className = clase;
+  if (texto !== undefined) elemento.textContent = texto;
+  return elemento;
+}
+
+function linea(textoAntes, comando) {
+  const parrafo = crear('p', 'tenue', textoAntes);
+  parrafo.append(crear('code', null, comando));
+  return parrafo;
+}
+
+// Arma el panel una vez. `simulable` es el modo prueba: el estado trae la simulación.
+function armarPanel(simulable) {
+  const raiz = crear('div', 'simular');
+  const detalle = crear('p', 'simular-detalle');
+  detalle.hidden = true;
+  raiz.append(detalle);
+  panel = { detalle };
+  if (simulable) {
+    const boton = crear('button', 'boton boton-primario', 'Simular el aviso');
+    boton.type = 'button';
+    boton.addEventListener('click', simularAviso);
+    const salida = crear('pre', 'xml salida-del-cli');
+    const codigo = crear('code');
+    salida.append(codigo);
+    salida.hidden = true;
+    const mensaje = crear('p', 'simular-mensaje');
+    mensaje.setAttribute('role', 'status');
+    raiz.append(
+      boton,
+      linea('El botón le pide al servidor del ERP que corra el CLI del SDK, que firma el aviso con su secreto y deja el respaldo de ejemplo para descargar: ', COMANDO),
+      linea('Lo mismo, a mano en otra terminal: ', A_MANO),
+      salida,
+      mensaje,
+    );
+    Object.assign(panel, { boton, salida, codigo, mensaje });
+  } else {
+    raiz.append(crear('p', 'tenue', 'En modo real el aviso llega de Enrolamiento, por el túnel que apunta a este puerto.'));
+  }
+  acciones.replaceChildren(raiz);
+}
+
+function pintarSimulacion({ corriendo, lineas, termino, codigo }) {
+  panel.boton.disabled = corriendo;
+  panel.codigo.textContent = lineas.join('\n');
+  panel.salida.hidden = lineas.length === 0;
+  panel.salida.scrollTop = panel.salida.scrollHeight;
+  if (corriendo) panel.mensaje.textContent = 'Corriendo el comando…';
+  else if (!termino) panel.mensaje.textContent = '';
+  else if (codigo === 0) panel.mensaje.textContent = 'El comando terminó bien: el receptor aceptó el aviso y descargó el respaldo.';
+  else if (codigo === null) panel.mensaje.textContent = 'El comando no terminó. Revise la salida y vuelva a intentarlo.';
+  else panel.mensaje.textContent = `El comando terminó con el código ${codigo}. Revise la salida y vuelva a intentarlo.`;
+}
+
+async function consultarEstado() {
+  const miConsulta = ++ultimaConsulta;
+  let estado;
+  try {
+    const respuesta = await fetch('/estado', { cache: 'no-store' });
+    if (!respuesta.ok) throw new Error(String(respuesta.status));
+    estado = await respuesta.json();
+  } catch {
+    if (miConsulta !== ultimaConsulta) return;
+    if (panel) {
+      panel.detalle.textContent = 'No se pudo consultar el estado del ERP. ¿Sigue corriendo el servidor?';
+      panel.detalle.hidden = false;
+    }
+    return;
+  }
+  if (miConsulta !== ultimaConsulta) return;
+  if (estado.fase === 'listo') {
+    clearInterval(consulta);
+    location.assign('/');
+    return;
+  }
+  if (!panel) armarPanel(estado.simulacion !== undefined);
+  panel.detalle.textContent = estado.detalle ?? '';
+  panel.detalle.hidden = !estado.detalle;
+  panel.detalle.classList.toggle('simular-error', estado.fase === 'error');
+  if (estado.simulacion && panel.boton) pintarSimulacion(estado.simulacion);
+}
+
+function esperarAviso() {
+  if (consulta !== null) return;
+  consultarEstado();
+  consulta = setInterval(consultarEstado, 2000);
+}
+
+async function simularAviso() {
+  panel.boton.disabled = true;
+  panel.mensaje.textContent = 'Corriendo el comando…';
+  try {
+    const respuesta = await fetch('/simular', { method: 'POST' });
+    // 409: ya hay uno corriendo. La consulta muestra su salida igual.
+    if (respuesta.status !== 202 && respuesta.status !== 409) {
+      panel.mensaje.textContent = `El servidor respondió ${respuesta.status} al simular el aviso.`;
+      panel.boton.disabled = false;
+      return;
+    }
+  } catch {
+    panel.mensaje.textContent = 'No se pudo hablar con el servidor del ERP. ¿Sigue corriendo?';
+    panel.boton.disabled = false;
+    return;
+  }
+  consultarEstado();
 }
 
 document.querySelector('#reintentar').addEventListener('click', empezar);

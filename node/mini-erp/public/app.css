@@ -293,6 +293,36 @@ a {
   display: none;
 }
 
+/* «Simular el aviso»: el botón, el comando y la salida del CLI. */
+
+.simular {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.simular .boton {
+  justify-self: start;
+}
+
+.simular .simular-error {
+  color: var(--peligro);
+}
+
+.salida-del-cli {
+  max-height: 280px;
+}
+
+.salida-del-cli code {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  white-space: pre-wrap;
+}
+
 .pulso {
   position: relative;
   flex: none;

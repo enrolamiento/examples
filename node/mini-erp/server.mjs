@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import Enrolamiento, { ErrorDeApi, ErrorDeConfiguracion } from 'enrolamiento';
 import { leerConfig, leerCredenciales, RUT_DE_LA_EMPRESA } from './config.mjs';
 import { crearReceptor, leerCuerpo } from './notices.mjs';
+import { crearSimulador, sinDirecciones } from './simulate.mjs';
 import { abrirAlmacen, FORMA_DEL_ID } from './store.mjs';
 import {
   hojaDeMarca,
@@ -33,6 +34,8 @@ const enrolamiento = new Enrolamiento({ urlBase: config.urlBase });
 const almacen = abrirAlmacen(config.datos);
 // Las mismas credenciales, para pedir la URL firmada del respaldo que trae el aviso.
 const receptor = crearReceptor({ config, almacen, credenciales: leerCredenciales(process.env) });
+// «Simular el aviso» corre el CLI del paquete con el entorno de este proceso. Solo en modo prueba.
+const simulador = config.modo === 'prueba' ? crearSimulador({ config }) : null;
 
 // Lo propio, más el script y el iframe del widget. 'self' en frame-src es para el PDF de los
 // documentos, que se sirve desde este mismo origen. Sin 'unsafe-inline': las páginas no lo necesitan.
@@ -149,6 +152,24 @@ function reiniciar(pedido, respuesta) {
   redirigir(respuesta, '/');
 }
 
+// POST /simular: «Simular el aviso». Solo existe en modo prueba. Del pedido no se lee nada: ni la query
+// ni el cuerpo llegan al proceso, que corre siempre el mismo comando, de a uno.
+function simular(pedido, respuesta) {
+  pedido.resume();
+  if (!delPropioErp(pedido)) return texto(respuesta, 403, 'Solo se simula el aviso desde el propio ERP.');
+  if (simulador.simular().corriendo) return json(respuesta, 409, { error: 'YA_CORRE', mensaje: 'El aviso ya se está simulando.' });
+  json(respuesta, 202, { corriendo: true });
+}
+
+// GET /estado: en qué va el aviso y, en modo prueba, la salida de «Simular el aviso». La página lo
+// consulta cada 2 segundos. Sin direcciones: ni la URL firmada ni la de la API llegan al navegador.
+function estadoDelAviso(pedido, respuesta) {
+  const { fase, detalle } = almacen.estado();
+  const cuerpo = { fase, detalle: sinDirecciones(detalle) };
+  if (simulador) cuerpo.simulacion = { corriendo: simulador.corriendo(), ...simulador.salida() };
+  json(respuesta, 200, cuerpo);
+}
+
 const RUTAS = {
   'GET /': (pedido, respuesta) => html(respuesta, 200, paginaInicio(config, almacen.resumen())),
   'GET /recorrido': (pedido, respuesta) => html(respuesta, 200, paginaRecorrido(config)),
@@ -165,6 +186,9 @@ const RUTAS = {
   'POST /reiniciar': reiniciar,
   // Borrar no va por GET: un enlace o una precarga del navegador no deben poder hacerlo.
   'GET /reiniciar': (pedido, respuesta) => texto(respuesta, 405, 'Use el botón «Borrar los datos» del inicio.', { Allow: 'POST' }),
+  'GET /estado': estadoDelAviso,
+  // «Simular el aviso» existe solo en modo prueba: en modo real, la ruta es un 404 como cualquier otra.
+  ...(simulador ? { 'POST /simular': simular } : {}),
 };
 
 async function servirPublico(respuesta, ruta) {
