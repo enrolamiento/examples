@@ -375,6 +375,374 @@ a {
   font-size: 0.86rem;
 }
 
+/* Grupos del menú. */
+
+.menu-grupo {
+  margin-top: 14px;
+  padding: 0 10px 4px;
+  color: var(--texto-tenue);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Textos de apoyo. */
+
+.sobretitulo {
+  color: var(--marca);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tenue {
+  color: var(--texto-tenue);
+}
+
+.mono {
+  font-family: var(--letra-mono);
+  font-size: 0.86em;
+}
+
+.sin-corte {
+  white-space: nowrap;
+}
+
+.secundario {
+  display: block;
+  margin-top: 1px;
+  color: var(--texto-tenue);
+  font-size: 0.82rem;
+}
+
+.etiqueta {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--fondo);
+  color: var(--texto);
+  font-size: 0.8rem;
+  font-weight: 540;
+  white-space: nowrap;
+}
+
+.codigo-tipo {
+  display: inline-block;
+  min-width: 2.4em;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--marca-suave);
+  color: var(--marca);
+  font: 600 0.78rem/1.6 var(--letra-mono);
+  text-align: center;
+}
+
+/* Inicio con datos: las cifras y «Empezar de nuevo». */
+
+.cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cifra {
+  display: grid;
+  gap: 2px;
+  height: 100%;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+  color: var(--texto);
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.cifra:hover {
+  border-color: var(--marca-borde);
+}
+
+.cifra-numero {
+  font-size: 1.9rem;
+  font-weight: 650;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cifra-rotulo {
+  color: var(--texto-tenue);
+  font-weight: 520;
+}
+
+.cifra:hover .cifra-rotulo {
+  color: var(--marca);
+}
+
+.zona-reinicio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 20px 24px;
+}
+
+.zona-reinicio > div {
+  display: grid;
+  gap: 4px;
+}
+
+.zona-reinicio p {
+  max-width: 56ch;
+  color: var(--texto-tenue);
+}
+
+.zona-reinicio form {
+  margin: 0;
+}
+
+.boton-peligro {
+  border-color: color-mix(in srgb, var(--peligro) 35%, #ffffff);
+  color: var(--peligro);
+}
+
+.boton-peligro:hover {
+  background: var(--peligro-suave);
+}
+
+/* Tablas. */
+
+.tabla-marco {
+  overflow-x: auto;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabla th,
+.tabla td {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--borde);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tabla th {
+  background: var(--fondo);
+  color: var(--texto-tenue);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tabla tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tabla tbody tr:hover td {
+  background: color-mix(in srgb, var(--marca) 3%, #ffffff);
+}
+
+.tabla .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tabla td.mono {
+  white-space: nowrap;
+}
+
+.tabla a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tabla a:hover {
+  text-decoration: underline;
+}
+
+.tabla-vacia {
+  padding: 32px 16px;
+  color: var(--texto-tenue);
+  text-align: center;
+}
+
+/* Detalle de un documento. */
+
+.migas {
+  color: var(--texto-tenue);
+  font-size: 0.88rem;
+}
+
+.migas a {
+  text-decoration: none;
+}
+
+.encabezado-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.encabezado-fila > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.partes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.parte {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 18px 20px;
+}
+
+.parte-nombre {
+  font-weight: 620;
+}
+
+.tarjeta-titulo {
+  color: var(--texto-tenue);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.datos {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.datos > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.datos dt {
+  color: var(--texto-tenue);
+}
+
+.datos dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.seccion {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.seccion .tabla-marco {
+  margin: 0 -20px;
+  border-top: 1px solid var(--borde);
+  border-bottom: 1px solid var(--borde);
+}
+
+.referencias {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.totales {
+  display: grid;
+  gap: 4px;
+  justify-self: end;
+  width: min(100%, 300px);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.totales > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.totales dt {
+  color: var(--texto-tenue);
+}
+
+.totales dd {
+  margin: 0;
+}
+
+.totales-total {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--borde);
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.totales-total dt {
+  color: var(--texto);
+}
+
+.pdf {
+  display: block;
+  width: 100%;
+  height: 720px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+}
+
+.xml {
+  max-height: 480px;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font: 0.8rem/1.6 var(--letra-mono);
+  tab-size: 2;
+}
+
+.xml code {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  white-space: pre;
+}
+
 /* Pantallas angostas: la barra lateral pasa arriba. */
 
 @media (max-width: 760px) {
@@ -408,5 +776,17 @@ a {
   .vacio {
     margin-top: 0;
     padding: 32px 16px;
+  }
+
+  .menu-grupo {
+    display: none;
+  }
+
+  .partes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pdf {
+    height: 520px;
   }
 }

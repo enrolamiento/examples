@@ -1,6 +1,7 @@
 // Lo que el ERP lee del entorno: los valores de fábrica y lo que se ignora por inválido.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { leerConfig, RUT_DE_LA_EMPRESA } from './config.mjs';
 
 test('sin variables, el ERP arranca con la marca de fábrica, en modo prueba y sin secretos', () => {
@@ -12,7 +13,13 @@ test('sin variables, el ERP arranca con la marca de fábrica, en modo prueba y s
     marca: { nombre: 'Andes ERP', color: '#1D4ED8', textoSobreColor: '#FFFFFF' },
     secretoCertificacion: null,
     secretoRespaldo: null,
+    datos: fileURLToPath(new URL('./datos/', import.meta.url)),
   });
+});
+
+test('la carpeta de datos se puede cambiar con MINI_ERP_DATOS', () => {
+  assert.equal(leerConfig({ MINI_ERP_DATOS: '/tmp/otra-carpeta' }).datos, '/tmp/otra-carpeta');
+  assert.equal(leerConfig({ MINI_ERP_DATOS: '' }).datos, fileURLToPath(new URL('./datos/', import.meta.url)));
 });
 
 test('la empresa del recorrido es un RUT de prueba fijo', () => {
