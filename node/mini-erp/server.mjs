@@ -3,18 +3,24 @@
 //   npm run mini-erp        (node --env-file=.env mini-erp/server.mjs)
 //
 // Este archivo arranca el servidor, reparte las rutas y pone las cabeceras. Lo que se lee del
-// entorno está en config.mjs y el HTML de cada pantalla en views.mjs.
+// entorno está en config.mjs, el HTML de cada pantalla en views.mjs y los avisos en notices.mjs.
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import Enrolamiento, { ErrorDeApi, ErrorDeConfiguracion } from 'enrolamiento';
-import { leerConfig, RUT_DE_LA_EMPRESA } from './config.mjs';
+import { leerConfig, leerCredenciales, RUT_DE_LA_EMPRESA } from './config.mjs';
+import { crearReceptor, leerCuerpo } from './notices.mjs';
+import { abrirAlmacen } from './store.mjs';
 import { hojaDeMarca, paginaInicio, paginaNoEncontrada, paginaRecorrido } from './views.mjs';
 
 const config = leerConfig(process.env);
 
 // Lee ENROLAMIENTO_USUARIO y ENROLAMIENTO_APIKEY del entorno. La APIKey no sale de este proceso.
 const enrolamiento = new Enrolamiento({ urlBase: config.urlBase });
+
+const almacen = abrirAlmacen(config.datos);
+// Las mismas credenciales, para pedir la URL firmada del respaldo que trae el aviso.
+const receptor = crearReceptor({ config, almacen, credenciales: leerCredenciales(process.env) });
 
 // Lo propio, más el script y el iframe del widget. 'self' en frame-src es para el PDF de los
 // documentos, que se sirve desde este mismo origen. Sin 'unsafe-inline': las páginas no lo necesitan.
@@ -44,8 +50,24 @@ async function crearSesion(pedido, respuesta, url) {
     // manda, y el recorrido sigue donde iba.
     ...(url.searchParams.has('seguir') ? {} : { escenario: 'camino_feliz' }),
   });
+  // Hay un recorrido en curso: el receptor espera su aviso. Renovar una sesión no borra lo que ya se sabe.
+  if (!url.searchParams.has('seguir') || almacen.estado().fase === 'vacio') almacen.anotar({ fase: 'esperando' });
   // Al navegador va solo el client_secret: vale 60 minutos y sirve solo para esta empresa.
   json(respuesta, 200, { client_secret: sesion.client_secret });
+}
+
+// POST /webhooks/certificacion y /webhooks/respaldo. Se responde antes de descargar: la API espera
+// 10 segundos y el respaldo tarda más.
+async function recibirAviso(pedido, respuesta, url) {
+  const cuerpo = await leerCuerpo(pedido);
+  if (cuerpo === null) {
+    respuesta.on('finish', () => pedido.destroy());
+    json(respuesta, 413, { error: 'AVISO_DEMASIADO_GRANDE' });
+    return;
+  }
+  const { status, cuerpo: salida, despues } = receptor.recibir(url.pathname, cuerpo, pedido.headers);
+  json(respuesta, status, salida);
+  despues?.catch((error) => console.error(error));
 }
 
 const RUTAS = {
@@ -54,6 +76,8 @@ const RUTAS = {
   'GET /marca.css': (pedido, respuesta) =>
     respuesta.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-cache' }).end(hojaDeMarca(config.marca)),
   'POST /sesion': crearSesion,
+  'POST /webhooks/certificacion': recibirAviso,
+  'POST /webhooks/respaldo': recibirAviso,
 };
 
 async function servirPublico(respuesta, ruta) {

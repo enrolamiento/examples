@@ -1,5 +1,8 @@
-// Lo que el Mini ERP lee del entorno (el .env): el modo, la marca, los secretos de los avisos y el
-// puerto. Nada más lee process.env: el resto del ejemplo recibe este objeto.
+// Lo que el Mini ERP lee del entorno (el .env): el modo, la marca, los secretos de los avisos, el
+// puerto y la carpeta de datos. Nada más lee process.env: el resto del ejemplo recibe este objeto.
+// Las credenciales de la API van aparte (leerCredenciales), para que no lleguen a las pantallas.
+
+import { fileURLToPath } from 'node:url';
 
 // En su sistema el RUT sale de lo que ya sabe del usuario que inició sesión; nunca de un campo
 // que el navegador pueda cambiar. Acá es un RUT de prueba fijo.
@@ -21,7 +24,15 @@ export function leerConfig(env) {
     // Cada evento es una suscripción con su propio secreto de firma (Mi Cuenta > Notificaciones).
     secretoCertificacion: leerSecreto(env.ENROLAMIENTO_WEBHOOK_SECRETO),
     secretoRespaldo: leerSecreto(env.ENROLAMIENTO_WEBHOOK_SECRETO_RESPALDO),
+    // Dónde se guarda el respaldo importado. Por omisión mini-erp/datos/, fuera de git; las pruebas
+    // usan una carpeta temporal.
+    datos: env.MINI_ERP_DATOS || fileURLToPath(new URL('./datos/', import.meta.url)),
   };
+}
+
+// Su usuario y su APIKey, para pedir la URL firmada del respaldo. Son los mismos que lee el SDK.
+export function leerCredenciales(env) {
+  return { usuario: env.ENROLAMIENTO_USUARIO || null, apikey: env.ENROLAMIENTO_APIKEY || null };
 }
 
 function leerPuerto(texto) {
