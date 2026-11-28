@@ -8,6 +8,7 @@ test('sin variables, el ERP arranca con la marca de fábrica, en modo prueba y s
   assert.deepEqual(leerConfig({}), {
     puerto: 3000,
     modo: 'prueba',
+    rut: '11111111-1',
     widget: 'https://widget.enrolamiento.cl',
     urlBase: 'https://api.enrolamiento.cl',
     marca: { nombre: 'Andes ERP', color: '#1D4ED8', textoSobreColor: '#FFFFFF' },
@@ -33,6 +34,22 @@ test('las credenciales se leen aparte, y vacías cuentan como ausentes', () => {
 
 test('la empresa del recorrido es un RUT de prueba fijo', () => {
   assert.equal(RUT_DE_LA_EMPRESA, '11111111-1');
+});
+
+test('en modo prueba la empresa es siempre la del respaldo de ejemplo, y MINI_ERP_RUT se ignora', () => {
+  assert.equal(leerConfig({ MINI_ERP_RUT: '22222222-2' }).rut, RUT_DE_LA_EMPRESA);
+  assert.equal(leerConfig({ MINI_ERP_MODO: 'prueba', MINI_ERP_RUT: 'no es un RUT' }).rut, RUT_DE_LA_EMPRESA);
+});
+
+test('en modo real la empresa es MINI_ERP_RUT, con su dígito verificador revisado', () => {
+  assert.equal(leerConfig({ MINI_ERP_MODO: 'real', MINI_ERP_RUT: '22222222-2' }).rut, '22222222-2');
+  assert.equal(leerConfig({ MINI_ERP_MODO: 'real', MINI_ERP_RUT: ' 12345678-5 ' }).rut, '12345678-5');
+});
+
+test('en modo real, sin MINI_ERP_RUT o con uno inválido, no hay empresa', () => {
+  for (const rut of [undefined, '', '   ', '22222222-3', '22.222.222-2', '222222222', '2222222-2x', '11111111-K']) {
+    assert.equal(leerConfig({ MINI_ERP_MODO: 'real', MINI_ERP_RUT: rut }).rut, null, String(rut));
+  }
 });
 
 test('lee el puerto, el widget, la API y los dos secretos del entorno', () => {

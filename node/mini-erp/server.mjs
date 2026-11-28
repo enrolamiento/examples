@@ -9,7 +9,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import Enrolamiento, { ErrorDeApi, ErrorDeConfiguracion } from 'enrolamiento';
-import { leerConfig, leerCredenciales, RUT_DE_LA_EMPRESA } from './config.mjs';
+import { leerConfig, leerCredenciales, SIN_RUT } from './config.mjs';
 import { crearReceptor, leerCuerpo } from './notices.mjs';
 import { crearSimulador, sinDirecciones } from './simulate.mjs';
 import { abrirAlmacen, FORMA_DEL_ID } from './store.mjs';
@@ -58,13 +58,20 @@ const json = (respuesta, status, cuerpo) =>
 // POST /sesion. En su sistema esta ruta exige la sesión de su usuario: quien no inició sesión no pide
 // una. Del pedido solo se mira `seguir`: el navegador no elige el RUT ni el escenario.
 async function crearSesion(pedido, respuesta, url) {
-  const sesion = await enrolamiento.portabilidad.sesiones({
-    rut: RUT_DE_LA_EMPRESA,
-    prueba: true,
-    // Con escenario, el guion de la empresa empieza de cero. Al renovar una sesión vencida no se
-    // manda, y el recorrido sigue donde iba.
-    ...(url.searchParams.has('seguir') ? {} : { escenario: 'camino_feliz' }),
-  });
+  // Modo real sin MINI_ERP_RUT: no hay empresa para la sesión, y no se le pide nada a la API.
+  if (config.rut === null) return json(respuesta, 500, { error: 'SIN_RUT', mensaje: SIN_RUT });
+  const sesion = await enrolamiento.portabilidad.sesiones(
+    config.modo === 'real'
+      ? // Una sesión real: la empresa certifica ante el SII y el aviso llega de Enrolamiento.
+        { rut: config.rut, prueba: false }
+      : {
+          rut: config.rut,
+          prueba: true,
+          // Con escenario, el guion de la empresa empieza de cero. Al renovar una sesión vencida no se
+          // manda, y el recorrido sigue donde iba.
+          ...(url.searchParams.has('seguir') ? {} : { escenario: 'camino_feliz' }),
+        },
+  );
   // Hay un recorrido en curso: el receptor espera su aviso. Renovar una sesión no borra lo que ya se sabe.
   if (!url.searchParams.has('seguir') || almacen.estado().fase === 'vacio') almacen.anotar({ fase: 'esperando' });
   // Al navegador va solo el client_secret: vale 60 minutos y sirve solo para esta empresa.

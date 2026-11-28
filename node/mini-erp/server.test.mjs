@@ -20,6 +20,8 @@ let responder;
 let api;
 let sitio;
 let sitioSinCredenciales;
+let sitioReal;
+let sitioRealSinRut;
 let puerto;
 
 const escuchar = (servidor) => new Promise((listo) => servidor.listen(0, '127.0.0.1', () => listo(servidor.address().port)));
@@ -71,6 +73,12 @@ before(async () => {
 
   const otro = await arrancar({ ENROLAMIENTO_USUARIO: '', ENROLAMIENTO_APIKEY: '', ENROLAMIENTO_URL: urlDeLaApi, ENROLAMIENTO_WIDGET: WIDGET });
   sitioSinCredenciales = `http://127.0.0.1:${otro}`;
+
+  const credenciales = { ENROLAMIENTO_USUARIO: '11111111-1', ENROLAMIENTO_APIKEY: 'apikey-de-prueba', ENROLAMIENTO_URL: urlDeLaApi, ENROLAMIENTO_WIDGET: WIDGET };
+  const real = await arrancar({ ...credenciales, MINI_ERP_MODO: 'real', MINI_ERP_RUT: '22222222-2' });
+  sitioReal = `http://127.0.0.1:${real}`;
+  const realSinRut = await arrancar({ ...credenciales, MINI_ERP_MODO: 'real', MINI_ERP_RUT: '22222222-3' });
+  sitioRealSinRut = `http://127.0.0.1:${realSinRut}`;
 });
 
 after(async () => {
@@ -221,6 +229,48 @@ test('escucha solo en 127.0.0.1: otra dirección de la máquina no lo alcanza', 
     socket.once('error', listo);
   });
   assert.equal(error?.code, 'ECONNREFUSED');
+});
+
+test('en modo real crea una sesión real con la empresa de MINI_ERP_RUT, sin escenario', async () => {
+  pedidos.length = 0;
+  responder = sesionCreada;
+  const respuesta = await fetch(`${sitioReal}/sesion?rut=11111111-1&escenario=conflicto`, { method: 'POST' });
+  assert.equal(respuesta.status, 200);
+  assert.deepEqual(await respuesta.json(), { client_secret: SECRETO });
+  assert.deepEqual(pedidos[0].cuerpo, { rut: '22222222-2', prueba: false });
+
+  // Al renovar, lo mismo.
+  await fetch(`${sitioReal}/sesion?seguir=1`, { method: 'POST' });
+  assert.deepEqual(pedidos[1].cuerpo, { rut: '22222222-2', prueba: false });
+});
+
+test('en modo real el recorrido dice que la sesión es real; en modo prueba, que es de prueba', async () => {
+  const real = await (await fetch(`${sitioReal}/recorrido`)).text();
+  assert.match(real, /Es una sesión real/);
+  assert.doesNotMatch(real, /sesión de prueba/);
+  assert.ok(real.includes('<script src="/public/journey.js"></script>'));
+  const prueba = await (await fetch(`${sitio}/recorrido`)).text();
+  assert.match(prueba, /Es una sesión de prueba/);
+});
+
+test('en modo real sin un MINI_ERP_RUT válido, el servidor arranca, y la sesión y el recorrido nombran la variable', async () => {
+  pedidos.length = 0;
+  responder = sesionCreada;
+  const respuesta = await fetch(`${sitioRealSinRut}/sesion`, { method: 'POST' });
+  assert.equal(respuesta.status, 500);
+  const cuerpo = await respuesta.json();
+  assert.equal(cuerpo.error, 'SIN_RUT');
+  assert.match(cuerpo.mensaje, /MINI_ERP_RUT/);
+  // No se le pide nada a la API.
+  assert.equal(pedidos.length, 0);
+
+  const recorrido = await fetch(`${sitioRealSinRut}/recorrido`);
+  const html = await recorrido.text();
+  assert.equal(recorrido.status, 200);
+  assert.match(html, /MINI_ERP_RUT/);
+  // Sin empresa no hay widget que montar.
+  assert.doesNotMatch(html, /journey\.js|enrolamiento\.js|id="portabilidad"/);
+  assert.equal((await fetch(sitioRealSinRut)).status, 200);
 });
 
 test('una ruta que no existe responde 404', async () => {

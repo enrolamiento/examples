@@ -113,14 +113,11 @@ Escriba el color entre comillas, `MINI_ERP_COLOR="#0F766E"`: sin ellas, `node --
 comienzo de un comentario y el color queda vacío. El texto sobre el color es blanco o negro, el que más
 contrasta.
 
-Al widget le llegan solo las claves básicas de `appearance`, `nombre` y `variables.colorPrimary`
-([`public/journey.js`](public/journey.js)). Funcionan igual con o sin marca blanca, y el widget no avisa nada en
-la consola.
+El ejemplo le pasa al widget solo las claves básicas de `appearance`, `nombre` y `variables.colorPrimary`
+([`public/journey.js`](public/journey.js)).
 
-- **El logo se publica en el portal de clientes**, en **Portabilidad › Apariencia del widget**. El widget no lo
-  toma de `appearance`.
-- **La marca blanca agrega toda la apariencia** (fondos, textos, bordes, tipografía, títulos) y saca la leyenda
-  de Enrolamiento del widget.
+El logo se publica en el portal de clientes, en **Portabilidad › Apariencia del widget**. El widget no lo toma de
+`appearance`.
 
 ## Por qué hay dos rutas de aviso
 
@@ -183,8 +180,12 @@ archivo por partes, desde el disco.
 
 ## Modo real
 
-Con `MINI_ERP_MODO=real` el código es el mismo, con dos diferencias:
+Con `MINI_ERP_MODO=real` el código es el mismo. Cambia esto:
 
+- la sesión es real, de la empresa de `MINI_ERP_RUT`: se pide con `prueba: false` y sin escenario. Consulta al
+  SII, crea la certificación y descuenta cupos;
+- los avisos se procesan solo si son de `MINI_ERP_RUT`. Sin un `MINI_ERP_RUT` válido, el ERP arranca igual, pero
+  el recorrido no monta el widget y dice qué falta;
 - «Simular el aviso» no existe: `POST /simular` responde 404;
 - el ERP manda su usuario y su APIKey solo a la API configurada, por `https`. Un aviso con una URL de
   `localhost`, como el del CLI, se rechaza.
@@ -196,11 +197,7 @@ Para recibir un aviso de verdad hace falta:
 - una dirección `https` pública que llegue al puerto del ERP, por ejemplo un túnel. Regístrela en **Mi Cuenta ›
   Notificaciones** para `certificacion.finalizada`, con su secreto en `ENROLAMIENTO_WEBHOOK_SECRETO`. Si
   quiere, regístrela también para `respaldo.finalizado`, con su secreto en `ENROLAMIENTO_WEBHOOK_SECRETO_RESPALDO`;
-- una empresa real.
-
-Dos cosas siguen siendo de prueba en el código, y las cambia usted: el RUT fijo (`RUT_DE_LA_EMPRESA`, en
-[`config.mjs`](config.mjs)) y la sesión, que [`server.mjs`](server.mjs) pide con `prueba: true` y el escenario
-`camino_feliz`. Una sesión de prueba no envía webhooks.
+- el RUT de una empresa real en `MINI_ERP_RUT`, con guion y dígito verificador.
 
 ## Variables
 
@@ -212,8 +209,11 @@ Además de las de [`node/README.md`](../README.md#configuración):
 | `ENROLAMIENTO_WEBHOOK_SECRETO_RESPALDO` | El secreto de la suscripción a `respaldo.finalizado` | Ninguno: la ruta `/webhooks/respaldo` responde 404 |
 | `MINI_ERP_NOMBRE`, `MINI_ERP_COLOR` | La marca. Vea [Su marca](#su-marca) | `Andes ERP`, `#1D4ED8` |
 | `MINI_ERP_MODO` | `prueba` o `real`. Cualquier otro valor es `prueba` | `prueba` |
+| `MINI_ERP_RUT` | Solo en modo real: el RUT de la empresa, como `12345678-5`. Se revisa el dígito verificador. En modo prueba se ignora | Ninguno. En modo prueba, la empresa es `11111111-1`, la del respaldo de ejemplo |
 | `PUERTO` | El puerto del ERP | `3000` |
 | `MINI_ERP_DATOS` | La carpeta donde se guarda lo importado | `mini-erp/datos/`, en `.gitignore` |
+| `ENROLAMIENTO_WIDGET` | Opcional: otro origen del script del widget | `https://widget.enrolamiento.cl` |
+| `ENROLAMIENTO_URL` | Opcional: otra dirección de la API | `https://api.enrolamiento.cl` |
 
 ## Los archivos, y cuáles copiar
 
@@ -247,7 +247,8 @@ node --test 'mini-erp/**/*.test.mjs'      # solo el Mini ERP
 - **No es un ERP.** No emite documentos, no edita datos y no tiene usuarios.
 - **Las rutas no piden inicio de sesión.** En su sistema, crear una sesión y borrar datos exigen la sesión de su
   usuario.
-- **El RUT es fijo.** El suyo sale de lo que su sistema ya sabe del usuario, nunca del navegador.
+- **La empresa sale del `.env`.** En modo prueba es la del respaldo de ejemplo; en modo real, `MINI_ERP_RUT`. En
+  su sistema sale de lo que ya sabe del usuario, nunca del navegador.
 - **Guarda una sola empresa.** Importar de nuevo reemplaza lo anterior.
 - **Recuerda los avisos vistos en memoria.** Se olvidan al reiniciar. En su sistema, guárdelos en su base de datos.
 - **No se expone a la red.** Escucha solo en `127.0.0.1`. En modo real, el aviso llega por el túnel.
@@ -259,7 +260,8 @@ node --test 'mini-erp/**/*.test.mjs'      # solo el Mini ERP
 | `No se pudo crear la sesión. Faltan las credenciales en el servidor…` | Falta `ENROLAMIENTO_USUARIO` o `ENROLAMIENTO_APIKEY` | Complete el `.env` y reinicie el ERP |
 | `No se pudo crear la sesión. El widget no está habilitado para su cuenta.` | El widget todavía no está habilitado para su cuenta | No lo reintente |
 | `No se pudo crear la sesión. La API respondió …` | La API rechazó el pedido | La consola del servidor trae el código y el mensaje |
-| `No cargó el script del widget (enrolamiento.js)…` | El navegador no pudo bajar el script del widget | Revise su conexión y los bloqueadores de contenido |
+| `No cargó el script del widget (enrolamiento.js)…` | El navegador no pudo bajar el script del widget | Revise su conexión, los bloqueadores de contenido y `ENROLAMIENTO_WIDGET`, si la definió |
+| `Falta MINI_ERP_RUT en el .env, o no es un RUT válido…` | Modo real sin el RUT de la empresa, o con un dígito verificador que no corresponde | Defina `MINI_ERP_RUT` y reinicie el ERP |
 | `El comando terminó con el código 2.` | Falta `ENROLAMIENTO_WEBHOOK_SECRETO`, o el comando está mal escrito | La salida dice cuál. Complete el `.env` y reinicie el ERP |
 | El comando espera 120 s y termina con el código 1 | El ERP ignoró el aviso: no se había creado una sesión | Pulse **Traer mi empresa** y recorra el widget antes de mandar el aviso |
 | `No está instalado el paquete enrolamiento…` | Falta instalar el SDK | `npm install`, desde `node/` |

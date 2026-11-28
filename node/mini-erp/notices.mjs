@@ -8,7 +8,6 @@
 // después. Nunca se escribe en un log ni en el estado la cabecera Authorization ni la URL firmada.
 
 import { ErrorDeConfiguracion, ErrorDeFirma, webhooks } from 'enrolamiento';
-import { RUT_DE_LA_EMPRESA } from './config.mjs';
 import { ErrorDeImportacion, importarRespaldo, TOPE_DE_BYTES } from './import.mjs';
 
 // Un aviso pesa menos de 1 KB: más que esto no es un aviso.
@@ -222,8 +221,9 @@ export function crearReceptor({ config, almacen, credenciales, registro = consol
       if (vistos.has(evento.id)) return;
       vistos.add(evento.id);
     }
-    // El RUT es el de la empresa de la sesión, nunca el que trae el aviso.
-    if (evento.rut !== RUT_DE_LA_EMPRESA) return;
+    // El RUT es el de la empresa de la sesión, nunca el que trae el aviso. En modo real sin
+    // MINI_ERP_RUT no hay empresa: no se procesa ninguno.
+    if (config.rut === null || evento.rut !== config.rut) return;
     const estado = almacen.estado();
     // Sin una sesión creada no hay recorrido en curso que esperara este aviso.
     if (estado.fase === 'vacio') return;
@@ -265,7 +265,7 @@ export function crearReceptor({ config, almacen, credenciales, registro = consol
     return (async () => {
       try {
         const bytes = await descargarRespaldo(respaldo.url, { credenciales, bytesEsperados: respaldo.bytes, config });
-        const resumen = await importarRespaldo(bytes, { rut: RUT_DE_LA_EMPRESA, bytesEsperados: respaldo.bytes, almacen });
+        const resumen = await importarRespaldo(bytes, { rut: config.rut, bytesEsperados: respaldo.bytes, almacen });
         almacen.anotar({ fase: 'listo', detalle: `Respaldo importado: ${resumen.ventas} ventas y ${resumen.compras} compras.`, respaldoId });
         registro.log(`Respaldo importado: ${resumen.ventas} ventas y ${resumen.compras} compras.`);
       } catch (error) {

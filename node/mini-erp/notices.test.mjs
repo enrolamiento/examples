@@ -400,6 +400,30 @@ test('el aviso de otro RUT, o sin una sesión creada, responde 200 y se ignora s
   assert.equal(api.pedidos.length, 0);
 });
 
+test('en modo real la empresa es la de MINI_ERP_RUT: el aviso del RUT de ejemplo se ignora', async (t) => {
+  const api = await apiFalsa(t);
+  const { almacen, receptor } = await receptorDePrueba(t, { env: { MINI_ERP_MODO: 'real', MINI_ERP_RUT: '22222222-2' } });
+  const ejemplo = await recibir(receptor, '/webhooks/certificacion', certificacion(respaldoListo(api.urlDelRespaldo)));
+  assert.equal(ejemplo.status, 200);
+  assert.equal(almacen.estado().fase, 'esperando');
+
+  // El de MINI_ERP_RUT sí se procesa: llega a la descarga, que en modo real no le manda credenciales a esta máquina.
+  await recibir(receptor, '/webhooks/certificacion', certificacion(respaldoListo(api.urlDelRespaldo), { rut: '22222222-2' }));
+  assert.equal(almacen.estado().fase, 'error');
+  assert.match(almacen.estado().detalle, /no es de la API configurada/);
+  assert.equal(api.pedidos.length, 0);
+});
+
+test('en modo real sin MINI_ERP_RUT, ningún aviso se procesa', async (t) => {
+  const api = await apiFalsa(t);
+  const { almacen, receptor } = await receptorDePrueba(t, { env: { MINI_ERP_MODO: 'real' } });
+  for (const rut of [RUT, '22222222-2']) {
+    assert.equal((await recibir(receptor, '/webhooks/certificacion', certificacion(respaldoListo(api.urlDelRespaldo), { rut }))).status, 200);
+  }
+  assert.equal(almacen.estado().fase, 'esperando');
+  assert.equal(api.pedidos.length, 0);
+});
+
 test('un evento desconocido, o el de «Enviar prueba», responde 200 y no cambia nada', async (t) => {
   const { almacen, receptor } = await receptorDePrueba(t);
   const antes = almacen.estado();

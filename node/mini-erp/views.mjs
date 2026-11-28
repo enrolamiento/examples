@@ -5,6 +5,8 @@
 // Las páginas no traen scripts ni estilos en línea: la política de seguridad (CSP) de server.mjs no
 // los deja correr. La marca llega al CSS por /marca.css y al script del recorrido por atributos data-.
 
+import { SIN_RUT } from './config.mjs';
+
 export function escapar(valor) {
   return String(valor ?? '')
     .replaceAll('&', '&amp;')
@@ -402,17 +404,34 @@ export function paginaDocumento(config, libro, documento, { xml, hayPdf }) {
   });
 }
 
-// El recorrido: el widget y, al terminar, el panel que espera el aviso firmado.
+// Lo que dice el recorrido de la sesión, según el modo.
+const SESION_DE = {
+  prueba: 'Es una sesión de prueba: no consulta al SII, no crea nada y no descuenta cupos.',
+  real: 'Es una sesión real: consulta al SII, crea la certificación de la empresa y descuenta cupos.',
+};
+
+// El recorrido: el widget y, al terminar, el panel que espera el aviso firmado. En modo real sin
+// MINI_ERP_RUT (config.rut null), solo el motivo: sin empresa no hay widget que montar.
 export function paginaRecorrido(config) {
   const nombre = escapar(config.marca.nombre);
+  const encabezado = `        <header class="encabezado">
+          <h1>Traer empresa</h1>
+          <p class="entrada">La empresa autoriza a ${nombre} y certifica su facturación electrónica. ${escapar(SESION_DE[config.modo])}</p>
+        </header>`;
+  if (config.rut === null) {
+    return pagina(config, {
+      titulo: 'Traer empresa',
+      actual: '/recorrido',
+      cuerpo: `${encabezado}
+        <div class="aviso aviso-error" role="alert">
+          <p>${escapar(SIN_RUT)}</p>
+        </div>`,
+    });
+  }
   return pagina(config, {
     titulo: 'Traer empresa',
     actual: '/recorrido',
-    cuerpo: `        <header class="encabezado">
-          <h1>Traer empresa</h1>
-          <p class="entrada">La empresa autoriza a ${nombre} y certifica su facturación electrónica. Es una sesión de prueba:
-            no consulta al SII, no crea nada y no descuenta cupos.</p>
-        </header>
+    cuerpo: `${encabezado}
         <div id="recorrido-error" class="aviso aviso-error" role="alert" hidden>
           <p id="recorrido-error-texto"></p>
           <button id="reintentar" class="boton" type="button">Reintentar</button>
