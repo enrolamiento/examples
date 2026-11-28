@@ -8,7 +8,7 @@
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import Enrolamiento, { ErrorDeApi, ErrorDeConfiguracion } from 'enrolamiento';
+import Enrolamiento, { ErrorDeApi, ErrorDeAutenticacion, ErrorDeConfiguracion } from 'enrolamiento';
 import { leerConfig, leerCredenciales, SIN_RUT } from './config.mjs';
 import { crearReceptor, leerCuerpo } from './notices.mjs';
 import { crearSimulador, sinDirecciones } from './simulate.mjs';
@@ -191,6 +191,8 @@ function estadoDelAviso(pedido, respuesta) {
 const RUTAS = {
   'GET /': (pedido, respuesta) => html(respuesta, 200, paginaInicio(config, almacen.resumen())),
   'GET /recorrido': (pedido, respuesta) => html(respuesta, 200, paginaRecorrido(config)),
+  // El navegador pide un ícono por su cuenta. El ERP no tiene uno: 204 y sin un 404 en la consola.
+  'GET /favicon.ico': (pedido, respuesta) => respuesta.writeHead(204, { 'Cache-Control': 'max-age=86400' }).end(),
   'GET /marca.css': (pedido, respuesta) =>
     respuesta
       .writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' })
@@ -226,7 +228,15 @@ function responderError(respuesta, error) {
   }
   if (error instanceof ErrorDeApi) {
     // Decida por el código, no por el status. Un 404 sin código es el widget sin habilitar para su cuenta.
-    console.error(`La API respondió ${error.status} ${error.codigo ?? ''}: ${error.mensaje} (${error.urlDeAyuda})`);
+    console.error(`La API respondió ${error.status}${error.codigo ? ` ${error.codigo}` : ''}: ${error.mensaje} (${error.urlDeAyuda})`);
+    // 401: la API no aceptó su usuario y su APIKey. Lo arregla el .env, no un reintento.
+    if (error instanceof ErrorDeAutenticacion) {
+      json(respuesta, 502, {
+        error: 'CREDENCIALES_RECHAZADAS',
+        mensaje: 'La API rechazó las credenciales: revise ENROLAMIENTO_USUARIO y ENROLAMIENTO_APIKEY en el .env y reinicie el Mini ERP.',
+      });
+      return;
+    }
     if (error.status === 404 && error.codigo === null) {
       json(respuesta, 502, { error: 'WIDGET_NO_HABILITADO', mensaje: 'El widget no está habilitado para su cuenta.' });
       return;

@@ -159,6 +159,30 @@ test('otro error de la API llega como su código, sin el mensaje de la API ni la
   assert.doesNotMatch(JSON.stringify(cuerpo), /no está contratada|apikey-de-prueba/);
 });
 
+test('un 401 de la API dice que se rechazaron las credenciales y nombra las variables, sin la APIKey', async () => {
+  responder = (respuesta) => respuesta.writeHead(401).end();
+  const respuesta = await fetch(`${sitio}/sesion`, { method: 'POST' });
+  assert.equal(respuesta.status, 502);
+  const cuerpo = await respuesta.json();
+  assert.equal(cuerpo.error, 'CREDENCIALES_RECHAZADAS');
+  assert.match(cuerpo.mensaje, /rechazó las credenciales/);
+  assert.match(cuerpo.mensaje, /ENROLAMIENTO_USUARIO/);
+  assert.match(cuerpo.mensaje, /ENROLAMIENTO_APIKEY/);
+  assert.doesNotMatch(JSON.stringify(cuerpo), /apikey-de-prueba|SIN_CODIGO/);
+});
+
+test('el ícono que pide el navegador responde 204: sin un 404 en la consola', async () => {
+  const respuesta = await fetch(`${sitio}/favicon.ico`);
+  assert.equal(respuesta.status, 204);
+  assert.equal(await respuesta.text(), '');
+});
+
+test('si no se pudo crear la sesión, el recorrido oculta el recuadro vacío del widget', async () => {
+  const js = await (await fetch(`${sitio}/public/journey.js`)).text();
+  assert.match(js, /catch \(error\) \{\s*if \(miTurno === turno\) \{[^}]*seccionWidget\.hidden = true;/);
+  assert.match(js, /typeof Enrolamiento !== 'function'\) \{[^}]*seccionWidget\.hidden = true;/);
+});
+
 test('sin credenciales en el servidor, la sesión dice qué falta y el servidor sigue vivo', async () => {
   const respuesta = await fetch(`${sitioSinCredenciales}/sesion`, { method: 'POST' });
   assert.equal(respuesta.status, 500);

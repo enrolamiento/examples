@@ -37,6 +37,7 @@ async function empezar() {
   // Sin el script del widget no hay recorrido: se dice en vez de quedar en «Preparando la sesión…».
   if (typeof Enrolamiento !== 'function') {
     cargando.hidden = true;
+    seccionWidget.hidden = true;
     mostrarError(
       'No cargó el script del widget (enrolamiento.js). Revise su conexión, un bloqueador de contenido o ENROLAMIENTO_WIDGET en el .env, y recargue la página.',
     );
@@ -47,7 +48,9 @@ async function empezar() {
     clientSecret = await pedirSesion('/sesion');
   } catch (error) {
     if (miTurno === turno) {
+      // Sin sesión, el recuadro del widget quedaría vacío: se oculta hasta «Reintentar».
       cargando.hidden = true;
+      seccionWidget.hidden = true;
       mostrarError(`No se pudo crear la sesión. ${error.message}`);
     }
     return;

@@ -274,6 +274,7 @@ node --test 'mini-erp/**/*.test.mjs'      # solo el Mini ERP
 | Qué ve | Causa | Qué hacer |
 |---|---|---|
 | `No se pudo crear la sesión. Faltan las credenciales en el servidor…` | Falta `ENROLAMIENTO_USUARIO` o `ENROLAMIENTO_APIKEY` | Complete el `.env` y reinicie el ERP |
+| `No se pudo crear la sesión. La API rechazó las credenciales…` | La API no aceptó su usuario o su APIKey (401) | Escriba el usuario como lo muestra el portal. Si generó una APIKey nueva, la anterior dejó de servir. Reinicie el ERP |
 | `No se pudo crear la sesión. El widget no está habilitado para su cuenta.` | El widget todavía no está habilitado para su cuenta | No lo reintente |
 | `No se pudo crear la sesión. La API respondió …` | La API rechazó el pedido | La consola del servidor trae el código y el mensaje |
 | `No cargó el script del widget (enrolamiento.js)…` | El navegador no pudo bajar el script del widget | Revise su conexión, los bloqueadores de contenido y `ENROLAMIENTO_WIDGET`, si la definió |
