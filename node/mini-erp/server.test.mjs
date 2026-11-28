@@ -4,7 +4,10 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const WIDGET = 'https://widget.enrolamiento.cl';
@@ -12,6 +15,7 @@ const SECRETO = `wst_${'3f9c2a7e5b1d4c08a6e2f0b9d7c41e53'}_${'Ejemplo'.repeat(6)
 const CSP = `default-src 'self'; script-src 'self' ${WIDGET}; frame-src 'self' ${WIDGET}; object-src 'none'`;
 const pedidos = [];
 const procesos = [];
+const carpetas = [];
 let responder;
 let api;
 let sitio;
@@ -27,10 +31,13 @@ async function puertoLibre() {
   return numero;
 }
 
+// Cada servidor con su carpeta de datos temporal y vacía: nunca datos/.
 async function arrancar(env) {
   const numero = await puertoLibre();
+  const carpeta = await mkdtemp(join(tmpdir(), 'mini-erp-servidor-'));
+  carpetas.push(carpeta);
   const erp = spawn(process.execPath, [fileURLToPath(new URL('./server.mjs', import.meta.url))], {
-    env: { ...process.env, PUERTO: String(numero), ...env },
+    env: { ...process.env, PUERTO: String(numero), MINI_ERP_DATOS: carpeta, ...env },
     stdio: ['ignore', 'pipe', 'ignore'],
   });
   procesos.push(erp);
@@ -66,9 +73,10 @@ before(async () => {
   sitioSinCredenciales = `http://127.0.0.1:${otro}`;
 });
 
-after(() => {
+after(async () => {
   for (const erp of procesos) erp.kill();
   api?.close();
+  for (const carpeta of carpetas) await rm(carpeta, { recursive: true, force: true });
 });
 
 const sesionCreada = (respuesta) =>

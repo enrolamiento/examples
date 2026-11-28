@@ -19,6 +19,7 @@ test('sin variables, el ERP arranca con la marca de fábrica, en modo prueba y s
 
 test('la carpeta de datos se puede cambiar con MINI_ERP_DATOS', () => {
   assert.equal(leerConfig({ MINI_ERP_DATOS: '/tmp/otra' }).datos, '/tmp/otra');
+  assert.equal(leerConfig({ MINI_ERP_DATOS: '' }).datos, fileURLToPath(new URL('./datos/', import.meta.url)));
 });
 
 test('las credenciales se leen aparte, y vacías cuentan como ausentes', () => {
