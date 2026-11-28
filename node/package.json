@@ -8,9 +8,11 @@
   },
   "scripts": {
     "test": "node --test",
+    "mini-erp": "node --env-file=.env mini-erp/server.mjs",
     "webhooks:probar": "node --env-file=.env node_modules/enrolamiento/dist/cli.js webhooks probar"
   },
   "dependencies": {
-    "enrolamiento": "^0.2.0"
+    "enrolamiento": "^0.2.0",
+    "fflate": "0.8.3"
   }
 }
