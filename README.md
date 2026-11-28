@@ -8,11 +8,13 @@ la certificación SII para emisores de DTE.
 | Consultar una certificación | La primera llamada: autenticarse, leer la respuesta y leer un error | [`node/quickstart`](node/quickstart/get-certification.mjs) |
 | Recibir webhooks | Verificar la firma, deduplicar y responder a tiempo | [`node/webhook-receiver`](node/webhook-receiver/server.mjs) |
 | Widget de Portabilidad | Crear la sesión en el servidor y montar el widget en una página propia | [`node/portability-widget`](node/portability-widget/server.mjs) |
+| Mini ERP | De punta a punta: el widget con su marca, el aviso firmado, la descarga del respaldo y la empresa con sus datos | [`node/mini-erp`](node/mini-erp/README.md) |
 
 ## Qué necesita
 
 - **Node 22.12 o más nuevo.** Los ejemplos usan el SDK oficial,
-  [`enrolamiento`](https://www.npmjs.com/package/enrolamiento), y no tienen otra dependencia.
+  [`enrolamiento`](https://www.npmjs.com/package/enrolamiento). El Mini ERP suma
+  [`fflate`](https://www.npmjs.com/package/fflate), para abrir el `.zip` del respaldo.
 - **Una cuenta de Enrolamiento**, para el ejemplo que llama a la API: su usuario y su APIKey están en
   el portal de clientes, **Mi Cuenta**, pestaña **Integración**. Si todavía no tiene cuenta, créela en
   [www.enrolamiento.cl](https://www.enrolamiento.cl).
