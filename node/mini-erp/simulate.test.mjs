@@ -132,6 +132,23 @@ console.error('firmada: https://almacen.test/respaldo.zip?firma=abc y el secreto
   assert.ok(!todo.includes(SECRETO));
 });
 
+test('un secreto de menos de 8 caracteres no se enmascara: la salida queda legible; uno de 8 o más, sí', async () => {
+  const cli = await cliFalso(`console.log('Aviso enviado a http://localhost:3999/webhooks/certificacion: respondió 200 en 3 ms.');
+console.log('Listo: su receptor aceptó el aviso y descargó el respaldo. clave12x');`);
+  const corto = crearSimulador({ config, cli, entorno: { ...process.env, ENROLAMIENTO_WEBHOOK_SECRETO: 'a' } });
+  corto.simular();
+  const salida = await esperarHasta(() => (corto.salida().termino ? corto.salida() : null));
+  assert.deepEqual(salida.lineas, [
+    'Aviso enviado a /webhooks/certificacion: respondió 200 en 3 ms.',
+    'Listo: su receptor aceptó el aviso y descargó el respaldo. clave12x',
+  ]);
+
+  const largo = crearSimulador({ config, cli, entorno: { ...process.env, ENROLAMIENTO_WEBHOOK_SECRETO: 'clave12x' } });
+  largo.simular();
+  const otra = await esperarHasta(() => (largo.salida().termino ? largo.salida() : null));
+  assert.equal(otra.lineas[1], 'Listo: su receptor aceptó el aviso y descargó el respaldo. [secreto]');
+});
+
 test('sinDirecciones saca cualquier dirección http(s) y deja la puntuación que la sigue', () => {
   assert.equal(sinDirecciones('la API configurada (http://127.0.0.1:4000).'), 'la API configurada ([dirección]).');
   assert.equal(sinDirecciones('vaya a https://a.test/x?y=1, luego'), 'vaya a [dirección], luego');

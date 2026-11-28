@@ -29,12 +29,14 @@ cp .env.example .env    # ENROLAMIENTO_USUARIO, ENROLAMIENTO_APIKEY y ENROLAMIEN
 npm run mini-erp        # http://localhost:3000
 ```
 
-En `ENROLAMIENTO_WEBHOOK_SECRETO` sirve cualquier texto: en la prueba, el aviso lo firma el CLI con ese mismo
-secreto, el que verifica el ERP. Si quiere uno al azar:
+Para `ENROLAMIENTO_WEBHOOK_SECRETO`, genere uno al azar:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
+
+En la prueba sirve cualquier texto, porque el aviso lo firma el CLI con ese mismo secreto, el que verifica el
+ERP. Pero uno de menos de 8 caracteres aparece tal cual en la salida de «Simular el aviso».
 
 1. Abra `http://localhost:3000`. El ERP está vacío: «Trae tu empresa desde el facturador gratuito». Pulse
    **Traer mi empresa**.
@@ -70,7 +72,8 @@ APIKey, baja el archivo y lo importa.
 - **No recibe nada del navegador.** Los argumentos son siempre los mismos y el comando corre sin shell, de a uno:
   una segunda pulsación mientras corre no lanza otro.
 - **La página no ve direcciones ni el secreto.** La salida llega con `[dirección]` en lugar de cada URL y
-  `[secreto]` en lugar del secreto.
+  `[secreto]` en lugar del secreto, si tiene 8 caracteres o más. Uno más corto no se cambia: con un secreto
+  `a`, cada «a» de la salida sería `[secreto]`.
 - Si el comando no termina en 150 segundos, el servidor lo corta y la página lo dice.
 
 El mismo comando se puede correr a mano, en otra terminal:
@@ -153,9 +156,11 @@ Las dos rutas importan con la misma función. Un respaldo que llega por las dos 
 | Sin el secreto de `certificacion.finalizada`, responde 503 y dice qué variable falta | Así el ERP arranca igual y el motivo queda a la vista |
 | Responde 200 enseguida y descarga después | La API espera 10 segundos, y el respaldo tarda más |
 | Ignora un aviso ya visto, por su `id` | Un aviso puede llegar más de una vez |
+| Con un respaldo importado o importándose, ignora todo aviso que no sea otro respaldo `listo`, de otro `id` | Una entrega se reintenta hasta 24 horas: un aviso viejo o desordenado no pisa lo importado, y el mismo respaldo no se importa dos veces |
 | Ignora el aviso de otro RUT, o si no se creó una sesión | El RUT es el de la sesión, nunca el que trae el aviso |
 | Responde 200 a un evento que no conoce, y lo ignora | La API puede agregar eventos. También ignora el de **Enviar prueba** |
 | Pide `respaldo.url` con `?formato=json` y `Authorization: Basic`, y baja la URL firmada con otro GET, sin `Authorization` | El almacenamiento rechaza un pedido con las dos firmas |
+| Pide la URL firmada a mano, con `fetch` | Solo porque en modo prueba el CLI sirve la descarga en `127.0.0.1`, y no en la API. En su sistema, use `enrolamiento.respaldos.descargar({ id })` del SDK, con el `id` de `respaldo.url` (`/v1/respaldos/{id}/descargar`): manda `?formato=json`, habla solo con su `urlBase`, reintenta y deja `X-Codigo-Error` en `ErrorDeApi.codigo`. Devuelve `{ url, vence }`, y el archivo se baja de esa `url` igual que acá |
 | No sigue redirecciones | Un cliente HTTP que las sigue puede reenviar su credencial a otro host |
 | Manda su usuario y su APIKey solo a la API configurada, por `https`. En modo prueba, también a `localhost` y `127.0.0.1` | La URL del aviso no decide a quién se le entregan las credenciales |
 | Compara el archivo con `respaldo.bytes` y corta lo que pase de ese tamaño | Un archivo de otro tamaño no es el respaldo del aviso |
@@ -164,7 +169,9 @@ Las dos rutas importan con la misma función. Un respaldo que llega por las dos 
 
 El importador ([`import.mjs`](import.mjs)) acepta una sola carpeta raíz, `mipyme-backup-<RUT>/`, con el RUT de la
 sesión. Adentro, solo los JSON del respaldo y las carpetas `emitidos/` y `recibidos/`, con documentos
-`<RUT>_<TIPO>_<FOLIO>.xml` o `.pdf`. Rechaza `..`, las rutas absolutas, las barras invertidas, las entradas
+`<RUT>_<TIPO>_<FOLIO>.xml` o `.pdf`. Los cinco JSON de siempre traen la `empresa` de la sesión. `faltantes.json`
+va solo si hubo documentos que no se pudieron bajar, y no trae `empresa`: trae `schema_version` y una lista
+`items` que no viene vacía. Rechaza `..`, las rutas absolutas, las barras invertidas, las entradas
 repetidas y las compresiones que un respaldo no usa. También topa las entradas (50.000) y lo descomprimido
 (200 MB). Los archivos en el disco toman el nombre del `id` de cada documento, ya validado.
 
@@ -198,6 +205,14 @@ Para recibir un aviso de verdad hace falta:
   Notificaciones** para `certificacion.finalizada`, con su secreto en `ENROLAMIENTO_WEBHOOK_SECRETO`. Si
   quiere, regístrela también para `respaldo.finalizado`, con su secreto en `ENROLAMIENTO_WEBHOOK_SECRETO_RESPALDO`;
 - el RUT de una empresa real en `MINI_ERP_RUT`, con guion y dígito verificador.
+
+**El túnel debe exponer solo `/webhooks/…`.** Las demás rutas no piden inicio de sesión: a través del túnel,
+cualquiera crearía sesiones reales con su APIKey (`POST /sesion` entrega un `client_secret` real), vería las
+listas, los XML y los PDF de una empresa real, o borraría los datos. Configure el túnel para que reenvíe solo
+las rutas que empiezan con `/webhooks/`. Si su túnel no puede filtrar rutas, el ERP igual responde 403 a todo
+pedido que no sea un aviso y no llegue con el `Host` del propio ERP, `localhost:<PUERTO>` o
+`127.0.0.1:<PUERTO>`. Eso lo protege también de una página que hace DNS rebinding contra su máquina. Los avisos
+se aceptan con cualquier `Host`, porque se verifican por su firma.
 
 ## Variables
 
@@ -251,7 +266,8 @@ node --test 'mini-erp/**/*.test.mjs'      # solo el Mini ERP
   su sistema sale de lo que ya sabe del usuario, nunca del navegador.
 - **Guarda una sola empresa.** Importar de nuevo reemplaza lo anterior.
 - **Recuerda los avisos vistos en memoria.** Se olvidan al reiniciar. En su sistema, guárdelos en su base de datos.
-- **No se expone a la red.** Escucha solo en `127.0.0.1`. En modo real, el aviso llega por el túnel.
+- **No se expone a la red.** Escucha solo en `127.0.0.1` y, salvo los avisos, responde solo a pedidos con el
+  `Host` del propio ERP. En modo real, el aviso llega por el túnel.
 
 ## Si algo falla
 
@@ -267,5 +283,6 @@ node --test 'mini-erp/**/*.test.mjs'      # solo el Mini ERP
 | `No está instalado el paquete enrolamiento…` | Falta instalar el SDK | `npm install`, desde `node/` |
 | `El respaldo pesa … bytes: este ejemplo importa hasta 52428800.` | El respaldo pasa el tope del ejemplo | Vea [El tope de tamaño](#el-tope-de-tamaño) |
 | `La url del respaldo no es de la API configurada…` | En modo real llegó un aviso con una URL local, como el del CLI | En modo real, el aviso lo manda Enrolamiento |
-| `Solo se borran los datos desde el propio ERP.` | La página se abrió desde otra dirección | Abra el ERP en `http://localhost:3000` o `http://127.0.0.1:3000`, con su `PUERTO` si lo cambió |
+| `Abra el ERP en http://localhost:3000.` (403) | El pedido llegó con otro `Host`: por un túnel, o con un nombre que no es `localhost` ni `127.0.0.1` | Abra el ERP en `http://localhost:3000` o `http://127.0.0.1:3000`, con su `PUERTO` si lo cambió. Por el túnel solo llegan los avisos |
+| `Solo se borran los datos desde el propio ERP.` o `Solo se crea la sesión desde el propio ERP.` | La página se abrió desde otra dirección | Abra el ERP en `http://localhost:3000` o `http://127.0.0.1:3000`, con su `PUERTO` si lo cambió |
 | `EADDRINUSE` al arrancar | Otro programa usa el puerto 3000 | Defina otro en `PUERTO` |

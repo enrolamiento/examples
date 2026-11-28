@@ -40,12 +40,17 @@ const escuchar = (servidor) => new Promise((listo) => servidor.listen(0, '127.0.
 async function apiFalsa(t, como = {}) {
   const pedidos = [];
   const contenido = como.contenido ?? EJEMPLO;
+  const colgados = [];
   const servidor = createServer((pedido, respuesta) => {
+    colgados.push(respuesta);
     const url = new URL(pedido.url, 'http://127.0.0.1');
     pedidos.push({ ruta: pedido.url, autorizacion: pedido.headers.authorization });
     if (url.pathname === `/v1/respaldos/${ID_DEL_RESPALDO}/descargar`) {
       if (como.api === 'redirige') return respuesta.writeHead(302, { Location: `${origen}/firmada/abc` }).end();
       if (como.api === 'falla') return respuesta.writeHead(500).end();
+      if (como.api === 'con-codigo') return respuesta.writeHead(403, { 'X-Codigo-Error': 'FUNCION_NO_CONTRATADA' }).end('FUNCION_NO_CONTRATADA:La función no está contratada.');
+      // Las cabeceras llegan y el cuerpo no termina nunca.
+      if (como.api === 'cuelga') return respuesta.writeHead(200, { 'Content-Type': 'application/json' }).write('{"url":');
       return respuesta
         .writeHead(200, { 'Content-Type': 'application/json' })
         .end(JSON.stringify({ url: como.urlFirmada ?? `${origen}/firmada/abc`, vence: '2026-11-28T16:04:05-03:00' }));
@@ -64,7 +69,10 @@ async function apiFalsa(t, como = {}) {
     respuesta.writeHead(404).end();
   });
   const origen = `http://127.0.0.1:${await escuchar(servidor)}`;
-  t.after(() => new Promise((listo) => servidor.close(listo)));
+  t.after(() => {
+    for (const respuesta of colgados) respuesta.destroy();
+    return new Promise((listo) => servidor.close(listo));
+  });
   return { origen, pedidos, urlDelRespaldo: `${origen}/v1/respaldos/${ID_DEL_RESPALDO}/descargar` };
 }
 
@@ -152,6 +160,22 @@ test('la descarga rechaza un archivo de otro tamaño que el del aviso, con o sin
   await assert.rejects(
     descargarRespaldo(sinLargo.urlDelRespaldo, { credenciales: CREDENCIALES, bytesEsperados: EJEMPLO.length + 1, config: PRUEBA }),
     ErrorDeDescarga,
+  );
+});
+
+test('un error de la API trae su X-Codigo-Error en el mensaje', async (t) => {
+  const api = await apiFalsa(t, { api: 'con-codigo' });
+  await assert.rejects(
+    descargarRespaldo(api.urlDelRespaldo, { credenciales: CREDENCIALES, bytesEsperados: EJEMPLO.length, config: PRUEBA }),
+    (error) => error instanceof ErrorDeDescarga && /403/.test(error.message) && /FUNCION_NO_CONTRATADA/.test(error.message) && !/no está contratada/.test(error.message),
+  );
+});
+
+test('una espera agotada mientras llega la respuesta de la API se cuenta como espera agotada', async (t) => {
+  const api = await apiFalsa(t, { api: 'cuelga' });
+  await assert.rejects(
+    descargarRespaldo(api.urlDelRespaldo, { credenciales: CREDENCIALES, bytesEsperados: EJEMPLO.length, config: PRUEBA, esperas: { api: 300 } }),
+    (error) => error instanceof ErrorDeDescarga && /Se agotó la espera al pedir la URL del respaldo/.test(error.message),
   );
 });
 
@@ -360,6 +384,50 @@ test('el mismo respaldo por las dos rutas se importa una vez', async (t) => {
   assert.equal(otra.status, 200);
   assert.equal(api.pedidos.length, 2);
   assert.equal(almacen.estado().fase, 'listo');
+});
+
+test('con el respaldo ya importado, un aviso viejo o desordenado no cambia nada, y repetir el mismo respaldo no lo reimporta', async (t) => {
+  const api = await apiFalsa(t);
+  const { almacen, receptor } = await receptorDePrueba(t);
+  await recibir(receptor, '/webhooks/certificacion', certificacion(respaldoListo(api.urlDelRespaldo)));
+  const listo = almacen.estado();
+  assert.equal(listo.fase, 'listo');
+  for (const [ruta, aviso, secreto] of [
+    ['/webhooks/certificacion', certificacion(respaldoSin('en_proceso')), SECRETO],
+    ['/webhooks/certificacion', certificacion(null), SECRETO],
+    ['/webhooks/certificacion', certificacion(respaldoSin('fallido', 'SIN_ACCESO_MIPYME')), SECRETO],
+    ['/webhooks/respaldo', respaldoFinalizado(respaldoSin('vencido')), SECRETO_RESPALDO],
+    // Una nueva entrega del mismo respaldo, con otro id de aviso.
+    ['/webhooks/certificacion', certificacion(respaldoListo(api.urlDelRespaldo)), SECRETO],
+  ]) {
+    const resultado = await recibir(receptor, ruta, aviso, secreto);
+    assert.equal(resultado.status, 200);
+    assert.deepEqual(almacen.estado(), listo, JSON.stringify(aviso.respaldo));
+  }
+  assert.equal(api.pedidos.length, 2);
+  assert.deepEqual(almacen.resumen(), RESUMEN_DEL_EJEMPLO);
+});
+
+test('mientras se importa, un aviso que no es listo no pisa la importación', async (t) => {
+  const api = await apiFalsa(t);
+  const { almacen, receptor } = await receptorDePrueba(t);
+  const uno = receptor.recibir('/webhooks/certificacion', ...firmado(certificacion(respaldoListo(api.urlDelRespaldo))));
+  assert.equal(almacen.estado().fase, 'importando');
+  await recibir(receptor, '/webhooks/certificacion', certificacion(respaldoSin('en_proceso')));
+  await recibir(receptor, '/webhooks/certificacion', certificacion(null));
+  assert.equal(almacen.estado().fase, 'importando');
+  await uno.despues;
+  assert.equal(almacen.estado().fase, 'listo');
+});
+
+test('con el respaldo importado, un respaldo listo distinto sí se importa', async (t) => {
+  const api = await apiFalsa(t);
+  const { almacen, receptor } = await receptorDePrueba(t);
+  await recibir(receptor, '/webhooks/certificacion', certificacion(respaldoListo(api.urlDelRespaldo)));
+  almacen.anotar({ fase: 'listo', detalle: 'otro', respaldoId: 'rsp_anterior' });
+  await recibir(receptor, '/webhooks/certificacion', certificacion(respaldoListo(api.urlDelRespaldo)));
+  assert.equal(api.pedidos.length, 4);
+  assert.equal(almacen.estado().respaldoId, ID_DEL_RESPALDO);
 });
 
 test('los dos avisos a la vez: el segundo ve que el respaldo ya se está importando', async (t) => {

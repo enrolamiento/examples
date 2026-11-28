@@ -22,6 +22,8 @@ export const TOPE_MS = 150_000;
 // Cuánto se guarda de la salida: lo que cabe en la pantalla, no un log sin fin.
 const TOPE_DE_LINEAS = 200;
 const LARGO_DE_LINEA = 500;
+// Desde cuántos caracteres el secreto se cambia por «[secreto]» en la salida.
+const LARGO_MINIMO_DEL_SECRETO = 8;
 // Después de SIGTERM, cuánto se espera antes de SIGKILL.
 const GRACIA_MS = 5_000;
 
@@ -38,8 +40,10 @@ const segundos = (ms) => (ms / 1000).toLocaleString('es-CL');
 export function crearSimulador({ config, ejecutable = process.execPath, cli = CLI, entorno = process.env, topeMs = TOPE_MS }) {
   const receptor = `http://localhost:${config.puerto}/webhooks/certificacion`;
   const argumentos = Object.freeze([cli, ...ARGUMENTOS, receptor]);
-  // Lo que se saca de cada línea: la url del receptor queda como su ruta; el secreto, nunca.
-  const secreto = entorno.ENROLAMIENTO_WEBHOOK_SECRETO || null;
+  // Lo que se saca de cada línea: la url del receptor queda como su ruta; el secreto, nunca. Un secreto
+  // de menos de 8 caracteres no se enmascara: con «a», cada «a» de la salida sería «[secreto]». El CLI no
+  // escribe el secreto; esto es por si acaso.
+  const secreto = (entorno.ENROLAMIENTO_WEBHOOK_SECRETO ?? '').length >= LARGO_MINIMO_DEL_SECRETO ? entorno.ENROLAMIENTO_WEBHOOK_SECRETO : null;
 
   let proceso = null;
   let lineas = [];

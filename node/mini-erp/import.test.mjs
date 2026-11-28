@@ -81,6 +81,28 @@ test('importar no toca el estado del aviso', async (t) => {
   assert.deepEqual(almacen.estado(), { fase: 'importando', detalle: null, respaldoId: 'rsp_1' });
 });
 
+// faltantes.json como lo arma el respaldo real: schema_version e items, sin empresa. Sus documentos no
+// están en ventas ni en compras, ni sus archivos en el .zip.
+const FALTANTES = {
+  schema_version: '1.0',
+  items: [
+    { id: '11111111-1_33_1999', sentido: 'emitidos', tipo_dte: 33, folio: 1999, motivo: 'pendiente' },
+    { id: '99999999-9_33_5001', sentido: 'recibidos', tipo_dte: 33, folio: 5001, motivo: 'fallido' },
+  ],
+};
+const conFaltantes = (faltantes) =>
+  variante((entradas) => {
+    entradas[`${RAIZ}/faltantes.json`] = strToU8(JSON.stringify(faltantes));
+  });
+
+test('un respaldo con faltantes.json de la forma real, sin empresa, se importa con su faltantes.json', async (t) => {
+  const { carpeta, almacen } = await almacenDePrueba(t);
+  const resumen = await importar(conFaltantes(FALTANTES), almacen);
+  assert.deepEqual(resumen, RESUMEN_DEL_EJEMPLO);
+  assert.equal(almacen.documento('emitidos', '11111111-1_33_1999'), null);
+  assert.deepEqual(JSON.parse(await readFile(join(carpeta, 'actual', 'faltantes.json'), 'utf8')), FALTANTES);
+});
+
 // Cada caso: un nombre y cómo arma los bytes y las opciones del intento malo.
 const RECHAZOS = [
   ['un tamaño distinto de bytesEsperados', () => [EJEMPLO, { bytesEsperados: EJEMPLO.length + 1 }]],
@@ -138,6 +160,9 @@ const RECHAZOS = [
     compras.empresa.rut = '22222222-2';
     entradas[`${RAIZ}/compras.json`] = strToU8(JSON.stringify(compras));
   })]],
+  ['un faltantes.json sin items', () => [conFaltantes({ schema_version: '1.0' })]],
+  ['un faltantes.json con items vacío', () => [conFaltantes({ schema_version: '1.0', items: [] })]],
+  ['un faltantes.json sin schema_version', () => [conFaltantes({ items: FALTANTES.items })]],
   ['un documento con un id que no es {RUT}_{TIPO}_{FOLIO}', () => [variante((entradas) => {
     const ventas = JSON.parse(Buffer.from(entradas[`${RAIZ}/ventas.json`]).toString('utf8'));
     ventas.items[0].id = '../../estado';

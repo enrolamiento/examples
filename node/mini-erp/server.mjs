@@ -53,11 +53,15 @@ const html = (respuesta, status, contenido) =>
     .end(contenido);
 
 const json = (respuesta, status, cuerpo) =>
-  respuesta.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(cuerpo));
+  respuesta
+    .writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
+    .end(JSON.stringify(cuerpo));
 
 // POST /sesion. En su sistema esta ruta exige la sesión de su usuario: quien no inició sesión no pide
 // una. Del pedido solo se mira `seguir`: el navegador no elige el RUT ni el escenario.
 async function crearSesion(pedido, respuesta, url) {
+  // Una página de otro sitio no crea sesiones con su APIKey.
+  if (!delPropioErp(pedido)) return json(respuesta, 403, { error: 'OTRO_ORIGEN', mensaje: 'Solo se crea la sesión desde el propio ERP.' });
   // Modo real sin MINI_ERP_RUT: no hay empresa para la sesión, y no se le pide nada a la API.
   if (config.rut === null) return json(respuesta, 500, { error: 'SIN_RUT', mensaje: SIN_RUT });
   const sesion = await enrolamiento.portabilidad.sesiones(
@@ -152,6 +156,13 @@ function servirDocumento(respuesta, libro, id, tipo) {
 const ORIGENES_PROPIOS = [`http://localhost:${config.puerto}`, `http://127.0.0.1:${config.puerto}`];
 const delPropioErp = (pedido) => pedido.headers.origin === undefined || ORIGENES_PROPIOS.includes(pedido.headers.origin);
 
+// A qué nombre se le pidió la página. El ERP se abre solo como localhost o 127.0.0.1, con su puerto. Otro
+// Host es un túnel, que en modo real debe exponer solo los avisos (y aun así podría llegar todo), o una
+// página que hace DNS rebinding: un nombre suyo que apunta a 127.0.0.1. Las dos ven 403.
+const HOSTS_PROPIOS = [`localhost:${config.puerto}`, `127.0.0.1:${config.puerto}`];
+const esUnAviso = (pedido, url) => pedido.method === 'POST' && url.pathname.startsWith('/webhooks/');
+const conHostPropio = (pedido) => HOSTS_PROPIOS.includes(pedido.headers.host?.toLowerCase());
+
 // POST /reiniciar: «Empezar de nuevo». Borra lo importado y el estado del aviso.
 function reiniciar(pedido, respuesta) {
   if (!delPropioErp(pedido)) return texto(respuesta, 403, 'Solo se borran los datos desde el propio ERP.');
@@ -181,7 +192,9 @@ const RUTAS = {
   'GET /': (pedido, respuesta) => html(respuesta, 200, paginaInicio(config, almacen.resumen())),
   'GET /recorrido': (pedido, respuesta) => html(respuesta, 200, paginaRecorrido(config)),
   'GET /marca.css': (pedido, respuesta) =>
-    respuesta.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-cache' }).end(hojaDeMarca(config.marca)),
+    respuesta
+      .writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' })
+      .end(hojaDeMarca(config.marca)),
   'POST /sesion': crearSesion,
   'POST /webhooks/certificacion': recibirAviso,
   'POST /webhooks/respaldo': recibirAviso,
@@ -229,6 +242,11 @@ function responderError(respuesta, error) {
 const servidor = createServer(async (pedido, respuesta) => {
   const url = new URL(pedido.url, 'http://localhost');
   try {
+    // Los avisos llegan con el Host del túnel y se verifican por su firma. Todo lo demás, solo con el del ERP.
+    if (!esUnAviso(pedido, url) && !conHostPropio(pedido)) {
+      pedido.resume();
+      return texto(respuesta, 403, `Abra el ERP en http://localhost:${config.puerto}.`);
+    }
     const ruta = RUTAS[`${pedido.method} ${url.pathname}`];
     if (ruta) await ruta(pedido, respuesta, url);
     else if (pedido.method === 'GET' && Object.hasOwn(PUBLICOS, url.pathname)) await servirPublico(respuesta, url.pathname);

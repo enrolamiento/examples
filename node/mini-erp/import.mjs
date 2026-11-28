@@ -165,7 +165,13 @@ function leerJson(datos, nombre, rut) {
     rechazar(`${nombre}.json no es un JSON válido.`);
   }
   if (valor === null || typeof valor !== 'object' || !Array.isArray(valor.items)) rechazar(`${nombre}.json no tiene la forma de un respaldo.`);
-  if (valor.empresa?.rut !== rut) rechazar(`${nombre}.json es de otra empresa.`);
+  // faltantes.json no trae empresa: solo schema_version y la lista de lo que no se pudo bajar, que no
+  // viene vacía (sin faltantes, el archivo no va en el .zip). Los otros cinco dicen de qué empresa son.
+  if (nombre === 'faltantes') {
+    if (!Object.hasOwn(valor, 'schema_version') || valor.items.length === 0) rechazar('faltantes.json no tiene la forma de un respaldo.');
+  } else if (valor.empresa?.rut !== rut) {
+    rechazar(`${nombre}.json es de otra empresa.`);
+  }
   return valor;
 }
 

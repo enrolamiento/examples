@@ -64,9 +64,19 @@ async function pedir(url, opciones, espera, queSePide) {
   }
 }
 
-function exigir200(respuesta, queSePide) {
+// El código de un error de la API (X-Codigo-Error), para el mensaje: solo si tiene la forma de un código.
+function codigoDeError(respuesta) {
+  const codigo = respuesta.headers.get('x-codigo-error')?.trim() ?? '';
+  return /^[A-Z0-9_]{1,60}$/.test(codigo) ? codigo : null;
+}
+
+// Una respuesta que no es 200 no se lee: su cuerpo se cancela, para soltar la conexión.
+async function exigir200(respuesta, queSePide) {
+  if (respuesta.status === 200) return;
+  await respuesta.body?.cancel().catch(() => {});
   if (respuesta.status >= 300 && respuesta.status < 400) fallar(`Al pedir ${queSePide} la respuesta fue una redirección (${respuesta.status}), y no se siguen.`);
-  if (respuesta.status !== 200) fallar(`Al pedir ${queSePide} la respuesta fue ${respuesta.status}.`);
+  const codigo = codigoDeError(respuesta);
+  fallar(`Al pedir ${queSePide} la respuesta fue ${respuesta.status}${codigo === null ? '' : ` ${codigo}`}.`);
 }
 
 // Lee el archivo hasta `bytes` y ni uno más: un archivo de otro tamaño se corta y se rechaza.
@@ -95,7 +105,16 @@ async function leerArchivo(respuesta, bytes) {
 // La descarga, como la describe la guía «Respaldo MiPyme» (§Descargar): la url del aviso, con
 // ?formato=json y Authorization: Basic, entrega una URL firmada; el archivo se baja de ahí con otro
 // GET, sin Authorization. Todo se revisa antes de mandar las credenciales.
-export async function descargarRespaldo(url, { credenciales, bytesEsperados, config }) {
+//
+// En su sistema, pida la URL firmada con el SDK: enrolamiento.respaldos.descargar({ id: idDelRespaldo(respaldo.url) })
+// devuelve { url, vence }. El SDK manda siempre ?formato=json, habla solo con su urlBase, reintenta lo que
+// se puede reintentar y deja X-Codigo-Error en ErrorDeApi.codigo. El archivo se baja de esa `url` igual
+// que acá, con un GET sin Authorization. Este ejemplo pide respaldo.url a mano solo porque en modo prueba
+// el CLI sirve la descarga en 127.0.0.1, en un puerto que cambia en cada corrida, y no en la API.
+//
+// esperas: { api, archivo }, en milisegundos. Se cambian en las pruebas.
+export async function descargarRespaldo(url, { credenciales, bytesEsperados, config, esperas = {} }) {
+  const espera = { api: ESPERA_DE_LA_API_MS, archivo: ESPERA_DEL_ARCHIVO_MS, ...esperas };
   if (!hostPermitido(url, config)) {
     fallar(
       config.modo === 'real'
@@ -112,19 +131,21 @@ export async function descargarRespaldo(url, { credenciales, bytesEsperados, con
   const pedida = new URL(url);
   pedida.searchParams.set('formato', 'json');
   const autorizacion = `Basic ${Buffer.from(`${credenciales.usuario}:${credenciales.apikey}`, 'utf8').toString('base64')}`;
-  const deLaApi = await pedir(pedida, { headers: { Authorization: autorizacion, Accept: 'application/json' } }, ESPERA_DE_LA_API_MS, 'la URL del respaldo');
-  exigir200(deLaApi, 'la URL del respaldo');
+  const deLaApi = await pedir(pedida, { headers: { Authorization: autorizacion, Accept: 'application/json' } }, espera.api, 'la URL del respaldo');
+  await exigir200(deLaApi, 'la URL del respaldo');
   let firmada;
   try {
     firmada = leerUrl((await deLaApi.json())?.url);
-  } catch {
+  } catch (error) {
+    // La espera corre también mientras llega el cuerpo: agotada, es una espera agotada y no un JSON malo.
+    if (error?.name === 'TimeoutError') fallar('Se agotó la espera al pedir la URL del respaldo.');
     firmada = null;
   }
   if (!firmadaPermitida(firmada, config.modo)) fallar('La API no entregó una URL firmada https para el archivo.');
 
   // Sin Authorization: la URL lleva su propia firma, y el almacenamiento rechaza un pedido con las dos.
-  const archivo = await pedir(firmada, {}, ESPERA_DEL_ARCHIVO_MS, 'el archivo');
-  exigir200(archivo, 'el archivo');
+  const archivo = await pedir(firmada, {}, espera.archivo, 'el archivo');
+  await exigir200(archivo, 'el archivo');
   return leerArchivo(archivo, bytesEsperados);
 }
 
@@ -229,6 +250,9 @@ export function crearReceptor({ config, almacen, credenciales, registro = consol
     if (estado.fase === 'vacio') return;
 
     const respaldo = evento.respaldo ?? null;
+    // Un respaldo que se importa o ya se importó no lo cambia un aviso viejo o que llegó desordenado: una
+    // entrega se reintenta hasta 24 horas. Solo otro respaldo listo, con otro id, cambia el estado.
+    if ((estado.fase === 'importando' || estado.fase === 'listo') && respaldo?.estado !== 'listo') return;
     if (respaldo === null) {
       almacen.anotar({ fase: 'error', detalle: 'La certificación terminó sin respaldo: la cuenta no tiene el respaldo contratado o la empresa no es MiPyme.' });
       return;

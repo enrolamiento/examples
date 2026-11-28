@@ -3,15 +3,17 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
+import { createServer, request } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { webhooks } from 'enrolamiento';
 
 const WIDGET = 'https://widget.enrolamiento.cl';
 const SECRETO = `wst_${'3f9c2a7e5b1d4c08a6e2f0b9d7c41e53'}_${'Ejemplo'.repeat(6)}E`;
+const SECRETO_DEL_AVISO = 'secreto-de-prueba-servidor';
 const CSP = `default-src 'self'; script-src 'self' ${WIDGET}; frame-src 'self' ${WIDGET}; object-src 'none'`;
 const pedidos = [];
 const procesos = [];
@@ -66,6 +68,7 @@ before(async () => {
     ENROLAMIENTO_APIKEY: 'apikey-de-prueba',
     ENROLAMIENTO_URL: urlDeLaApi,
     ENROLAMIENTO_WIDGET: WIDGET,
+    ENROLAMIENTO_WEBHOOK_SECRETO: SECRETO_DEL_AVISO,
     MINI_ERP_NOMBRE: '<b>x',
     MINI_ERP_COLOR: '#0b5fff',
   });
@@ -86,6 +89,20 @@ after(async () => {
   api?.close();
   for (const carpeta of carpetas) await rm(carpeta, { recursive: true, force: true });
 });
+
+// Un pedido con la cabecera Host que se quiera: fetch no deja cambiarla.
+function pedirConHost(ruta, { host, metodo = 'GET', cabeceras = {}, cuerpo } = {}) {
+  return new Promise((listo, fallo) => {
+    const pedido = request({ host: '127.0.0.1', port: puerto, path: ruta, method: metodo, headers: { ...cabeceras, Host: host } }, (respuesta) => {
+      let texto = '';
+      respuesta.setEncoding('utf8');
+      respuesta.on('data', (trozo) => (texto += trozo));
+      respuesta.on('end', () => listo({ status: respuesta.statusCode, texto }));
+    });
+    pedido.once('error', fallo);
+    pedido.end(cuerpo);
+  });
+}
 
 const sesionCreada = (respuesta) =>
   respuesta.writeHead(200, { 'Content-Type': 'application/json' }).end(
@@ -271,6 +288,49 @@ test('en modo real sin un MINI_ERP_RUT válido, el servidor arranca, y la sesió
   // Sin empresa no hay widget que montar.
   assert.doesNotMatch(html, /journey\.js|enrolamiento\.js|id="portabilidad"/);
   assert.equal((await fetch(sitioRealSinRut)).status, 200);
+});
+
+test('con otro Host, como el de un túnel o un DNS rebinding, las pantallas y la sesión responden 403', async () => {
+  pedidos.length = 0;
+  responder = sesionCreada;
+  for (const host of ['x.ngrok.app', `evil.test:${puerto}`, `localhost:${puerto + 1}`]) {
+    assert.equal((await pedirConHost('/', { host })).status, 403, host);
+    assert.equal((await pedirConHost('/estado', { host })).status, 403, host);
+    assert.equal((await pedirConHost('/ventas', { host })).status, 403, host);
+    assert.equal((await pedirConHost('/sesion', { host, metodo: 'POST' })).status, 403, host);
+    assert.equal((await pedirConHost('/reiniciar', { host, metodo: 'POST' })).status, 403, host);
+  }
+  assert.equal(pedidos.length, 0);
+  // Los del propio ERP, sí.
+  assert.equal((await pedirConHost('/', { host: `localhost:${puerto}` })).status, 200);
+  assert.equal((await pedirConHost('/', { host: `127.0.0.1:${puerto}` })).status, 200);
+});
+
+test('con otro Host, el aviso se procesa igual: llega por el túnel', async () => {
+  const aviso = JSON.stringify({ evento: 'prueba', id: '0f8fad5b-d9cb-469f-a165-000000000999', fecha: '2026-11-28T15:04:05-03:00' });
+  const firma = webhooks.firmar(aviso, SECRETO_DEL_AVISO);
+  const respuesta = await pedirConHost('/webhooks/certificacion', {
+    host: 'x.ngrok.app',
+    metodo: 'POST',
+    cabeceras: { 'Content-Type': 'application/json', 'X-Enrolamiento-Evento': 'prueba', ...firma },
+    cuerpo: aviso,
+  });
+  assert.equal(respuesta.status, 200, respuesta.texto);
+  assert.deepEqual(JSON.parse(respuesta.texto), { recibido: true });
+});
+
+test('un formulario de otro sitio no puede crear una sesión', async () => {
+  pedidos.length = 0;
+  responder = sesionCreada;
+  const respuesta = await fetch(`${sitio}/sesion`, { method: 'POST', headers: { Origin: 'http://otro.test' } });
+  assert.equal(respuesta.status, 403);
+  assert.equal(pedidos.length, 0);
+  assert.equal((await fetch(`${sitio}/sesion`, { method: 'POST', headers: { Origin: sitio } })).status, 200);
+});
+
+test('las respuestas JSON y la hoja de la marca llevan X-Content-Type-Options: nosniff', async () => {
+  assert.equal((await fetch(`${sitio}/estado`)).headers.get('x-content-type-options'), 'nosniff');
+  assert.equal((await fetch(`${sitio}/marca.css`)).headers.get('x-content-type-options'), 'nosniff');
 });
 
 test('una ruta que no existe responde 404', async () => {
