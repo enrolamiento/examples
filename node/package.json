@@ -13,7 +13,7 @@
     "mini-erp:aviso": "node --env-file=.env node_modules/enrolamiento/dist/cli.js webhooks enviar certificacion.finalizada --url http://localhost:3000/webhooks/certificacion"
   },
   "dependencies": {
-    "enrolamiento": "^0.2.0",
+    "enrolamiento": "^0.3.0",
     "fflate": "0.8.3"
   }
 }

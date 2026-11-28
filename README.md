@@ -48,7 +48,7 @@ configuración de cada ejemplo y qué hacer si algo falla están en [`node/READM
 
 ## Compatibilidad
 
-Los ejemplos usan la versión 0.2 del SDK, que habla con la versión 1 de la API (`/v1/…`). Un cambio
+Los ejemplos usan la versión 0.3 del SDK, que habla con la versión 1 de la API (`/v1/…`). Un cambio
 incompatible de la API sube su versión mayor y se anuncia en el
 [changelog](https://developers.enrolamiento.cl/docs/changelog/).
 
